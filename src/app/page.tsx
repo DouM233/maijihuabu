@@ -3,6 +3,7 @@
 import { useCallback, useState } from 'react';
 import Canvas from '@/components/canvas/Canvas';
 import { AssetWall } from '@/components/workspace/asset-wall';
+import { CanvasHistory } from '@/components/workspace/canvas-history';
 import { SidebarNav, type TabId } from '@/components/workspace/sidebar-nav';
 import { SkillMatrix } from '@/components/workspace/skill-matrix';
 import type { PromptTemplate } from '@/lib/skillsData';
@@ -64,7 +65,7 @@ export default function HomePage() {
         </div>
 
         <div className={activeTab === 'history' ? 'h-full' : 'hidden h-full'}>
-          <AssetWall title="历史记录" defaultFilter="recent" />
+          <CanvasHistory onOpenCanvas={() => setActiveTab('creative')} />
         </div>
 
         <div className={activeTab === 'gallery' ? 'h-full' : 'hidden h-full'}>

@@ -9,6 +9,8 @@ interface CanvasStoreState {
 
   loadCanvases: () => Promise<void>;
   createCanvas: (name?: string) => Promise<CanvasListItem | null>;
+  loadCanvas: (id: string) => Promise<CanvasData | null>;
+  saveCanvas: (canvas: CanvasData) => Promise<CanvasData | null>;
   deleteCanvas: (id: string) => Promise<void>;
   renameCanvas: (id: string, name: string) => Promise<void>;
   setActive: (id: string) => void;
@@ -22,6 +24,16 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     throw new Error(errMsg);
   }
   return res.json();
+}
+
+function toListItem(canvas: CanvasData): CanvasListItem {
+  return {
+    id: canvas.id,
+    name: canvas.name,
+    nodeCount: canvas.nodes.length,
+    createdAt: canvas.createdAt,
+    updatedAt: canvas.updatedAt,
+  };
 }
 
 export const useCanvasStore = create<CanvasStoreState>((set, get) => ({
@@ -51,6 +63,37 @@ export const useCanvasStore = create<CanvasStoreState>((set, get) => ({
       return item.data;
     } catch (e: unknown) {
       set({ error: e instanceof Error ? e.message : '创建画布失败' });
+      return null;
+    }
+  },
+
+  async loadCanvas(id) {
+    try {
+      const item = await request<{ data: CanvasData }>(`/api/canvas/${id}`);
+      set({ activeId: item.data.id, error: null });
+      return item.data;
+    } catch (e: unknown) {
+      set({ error: e instanceof Error ? e.message : '鍔犺浇鐢诲竷澶辫触' });
+      return null;
+    }
+  },
+
+  async saveCanvas(canvas) {
+    try {
+      const saved = await request<{ data: CanvasData }>(`/api/canvas/${canvas.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(canvas),
+      });
+      const listItem = toListItem(saved.data);
+      set((s) => ({
+        activeId: saved.data.id,
+        canvases: [listItem, ...s.canvases.filter((item) => item.id !== saved.data.id)]
+          .sort((a, b) => b.updatedAt - a.updatedAt),
+        error: null,
+      }));
+      return saved.data;
+    } catch (e: unknown) {
+      set({ error: e instanceof Error ? e.message : '淇濆瓨鐢诲竷澶辫触' });
       return null;
     }
   },

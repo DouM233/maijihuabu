@@ -27,10 +27,13 @@ import {
 import '@xyflow/react/dist/style.css';
 import { isConnectionValid } from '@/lib/canvas/portTypes';
 import { NODE_REGISTRY } from '@/lib/canvas/nodeRegistry';
+import { useCanvasStore } from '@/lib/canvas/store';
+import type { CanvasData } from '@/lib/canvas/types';
 import type { PromptTemplate } from '@/lib/skillsData';
 import CanvasSidebar from './CanvasSidebar';
 import NodeActionBar from './NodeActionBar';
 import DeletableEdge from './edges/DeletableEdge';
+import { Plus, Save } from 'lucide-react';
 
 // 节点组件映射
 import ResizableTextNode from './nodes/ResizableTextNode';
@@ -264,17 +267,50 @@ function extractSkillTemplateTitles(template: PromptTemplate) {
   return matches.map((match) => match[2].trim()).filter(Boolean);
 }
 
+function stripRuntimeEdgeData(edge: Edge): Edge {
+  const data = edge.data ? { ...edge.data } : undefined;
+  if (data && 'onDelete' in data) {
+    delete data.onDelete;
+  }
+  return {
+    ...edge,
+    data,
+    selected: false,
+  };
+}
+
+function stripRuntimeNodeData(node: Node): Node {
+  return {
+    ...node,
+    selected: false,
+    dragging: false,
+    data: { ...node.data },
+    position: { ...node.position },
+  };
+}
+
 function CanvasInner({ onAddNodeRef, selectedSkillTemplate }: CanvasInnerProps) {
-  const { fitView, screenToFlowPosition, setViewport, zoomIn, zoomOut } = useReactFlow();
+  const { fitView, getViewport, screenToFlowPosition, setViewport, zoomIn, zoomOut } = useReactFlow();
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [canvasName, setCanvasName] = useState('未命名画板');
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+  const [isSavingCanvas, setIsSavingCanvas] = useState(false);
+  const [isLoadingCanvas, setIsLoadingCanvas] = useState(false);
+
+  const activeCanvasId = useCanvasStore((state) => state.activeId);
+  const loadCanvases = useCanvasStore((state) => state.loadCanvases);
+  const createCanvas = useCanvasStore((state) => state.createCanvas);
+  const loadCanvas = useCanvasStore((state) => state.loadCanvas);
+  const saveCanvas = useCanvasStore((state) => state.saveCanvas);
 
   const nodesRef = useRef<Node[]>([]);
   const edgesRef = useRef<Edge[]>([]);
   const undoStackRef = useRef<CanvasSnapshot[]>([]);
+  const skipCanvasLoadRef = useRef<string | null>(null);
   useEffect(() => { nodesRef.current = nodes; }, [nodes]);
   useEffect(() => { edgesRef.current = edges; }, [edges]);
 
@@ -287,6 +323,43 @@ function CanvasInner({ onAddNodeRef, selectedSkillTemplate }: CanvasInnerProps) 
       undoStackRef.current.shift();
     }
   }, []);
+
+  useEffect(() => {
+    void loadCanvases();
+  }, [loadCanvases]);
+
+  useEffect(() => {
+    if (!activeCanvasId) return;
+    if (skipCanvasLoadRef.current === activeCanvasId) {
+      skipCanvasLoadRef.current = null;
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoadingCanvas(true);
+    void loadCanvas(activeCanvasId)
+      .then((canvas) => {
+        if (cancelled || !canvas) return;
+        setCanvasName(canvas.name);
+        setNodes(canvas.nodes.map((node) => ({ ...node, selected: false })) as Node[]);
+        setEdges(canvas.edges.map(stripRuntimeEdgeData) as Edge[]);
+        if (canvas.viewport) {
+          setViewport(canvas.viewport);
+        }
+        undoStackRef.current = [];
+        setSelectedIds([]);
+        setLastSavedAt(canvas.updatedAt);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingCanvas(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeCanvasId, loadCanvas, setViewport]);
 
   const undoCanvas = useCallback(() => {
     const snapshot = undoStackRef.current.pop();
@@ -582,6 +655,59 @@ function CanvasInner({ onAddNodeRef, selectedSkillTemplate }: CanvasInnerProps) 
     [pushHistory, screenToFlowPosition]
   );
 
+  const handleNewCanvas = useCallback(async () => {
+    const name = window.prompt('请输入新画板名称', `画板 ${new Date().toLocaleString('zh-CN')}`);
+    if (name === null) return;
+
+    const created = await createCanvas(name.trim() || '未命名画板');
+    if (!created) return;
+
+    pushHistory();
+    setCanvasName(created.name);
+    setNodes([]);
+    setEdges([]);
+    setSelectedIds([]);
+    undoStackRef.current = [];
+    setViewport({ x: 0, y: 0, zoom: 1 });
+    setLastSavedAt(created.updatedAt);
+  }, [createCanvas, pushHistory, setViewport]);
+
+  const handleSaveCanvas = useCallback(async () => {
+    setIsSavingCanvas(true);
+    try {
+      let canvasId = activeCanvasId;
+      if (!canvasId) {
+        const created = await createCanvas(canvasName.trim() || '未命名画板');
+        if (!created) return;
+        canvasId = created.id;
+        skipCanvasLoadRef.current = created.id;
+      }
+
+      const canvas: CanvasData = {
+        id: canvasId,
+        name: canvasName.trim() || '未命名画板',
+        nodes: nodesRef.current.map(stripRuntimeNodeData) as CanvasData['nodes'],
+        edges: edgesRef.current.map(stripRuntimeEdgeData) as CanvasData['edges'],
+        viewport: getViewport(),
+        createdAt: 0,
+        updatedAt: 0,
+      };
+      const saved = await saveCanvas(canvas);
+      if (saved) {
+        setCanvasName(saved.name);
+        setLastSavedAt(saved.updatedAt);
+      }
+    } finally {
+      setIsSavingCanvas(false);
+    }
+  }, [activeCanvasId, canvasName, createCanvas, getViewport, saveCanvas]);
+
+  const savedStatus = isLoadingCanvas
+    ? '加载中'
+    : lastSavedAt
+      ? `上次保存 ${new Date(lastSavedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`
+      : '尚未保存';
+
   return (
     <div className="flex h-full w-full relative">
       {/* 左侧节点侧边栏 */}
@@ -589,6 +715,33 @@ function CanvasInner({ onAddNodeRef, selectedSkillTemplate }: CanvasInnerProps) 
 
       {/* 画布区域 */}
       <div className="flex-1 relative">
+        <div className="absolute left-4 top-3 z-20 flex items-center gap-2 rounded-2xl border border-border bg-card/92 px-3 py-2 text-xs shadow-lg backdrop-blur-md">
+          <input
+            value={canvasName}
+            onChange={(event) => setCanvasName(event.target.value)}
+            className="nodrag nopan h-8 w-48 rounded-lg border border-border bg-background px-3 text-sm font-medium text-foreground outline-none transition focus:border-primary"
+            placeholder="画板名称"
+          />
+          <button
+            type="button"
+            onClick={handleNewCanvas}
+            className="nodrag nopan inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-background px-3 font-medium text-foreground transition hover:border-primary/60 hover:text-primary"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            新建
+          </button>
+          <button
+            type="button"
+            onClick={handleSaveCanvas}
+            disabled={isSavingCanvas}
+            className="nodrag nopan inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 font-medium text-primary-foreground shadow-sm transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Save className="h-3.5 w-3.5" />
+            {isSavingCanvas ? '保存中' : '保存'}
+          </button>
+          <span className="min-w-20 text-muted-foreground">{savedStatus}</span>
+        </div>
+
         <ReactFlow
           nodes={nodes}
           edges={displayEdges}

@@ -93,6 +93,10 @@ export interface CanvasData {
     type: string;
     position: { x: number; y: number };
     data: Record<string, unknown>;
+    width?: number;
+    height?: number;
+    selected?: boolean;
+    [key: string]: unknown;
   }>;
   edges: Array<{
     id: string;
@@ -100,6 +104,10 @@ export interface CanvasData {
     target: string;
     sourceHandle?: string;
     targetHandle?: string;
+    animated?: boolean;
+    type?: string;
+    data?: Record<string, unknown>;
+    [key: string]: unknown;
   }>;
   viewport?: {
     x: number;

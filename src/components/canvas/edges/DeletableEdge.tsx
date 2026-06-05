@@ -1,7 +1,7 @@
 'use client';
 
-import { memo, useState, type MouseEvent } from 'react';
-import { BaseEdge, EdgeLabelRenderer, type EdgeProps, getSmoothStepPath } from '@xyflow/react';
+import { memo, useEffect, useRef, useState, type MouseEvent, type PointerEvent } from 'react';
+import { BaseEdge, EdgeLabelRenderer, type EdgeProps, getSmoothStepPath, useReactFlow } from '@xyflow/react';
 import { X } from 'lucide-react';
 
 type DeletableEdgeData = {
@@ -9,7 +9,10 @@ type DeletableEdgeData = {
 };
 
 function DeletableEdge({ id, sourceX, sourceY, targetX, targetY, markerEnd, data }: EdgeProps) {
+  const { screenToFlowPosition, setEdges } = useReactFlow();
   const [isHovered, setIsHovered] = useState(false);
+  const [buttonPosition, setButtonPosition] = useState<{ x: number; y: number } | null>(null);
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX,
     sourceY,
@@ -17,11 +20,46 @@ function DeletableEdge({ id, sourceX, sourceY, targetX, targetY, markerEnd, data
     targetY,
   });
 
+  useEffect(() => {
+    return () => {
+      if (hideTimerRef.current) {
+        clearTimeout(hideTimerRef.current);
+      }
+    };
+  }, []);
+
+  const keepVisible = () => {
+    if (hideTimerRef.current) {
+      clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+    }
+    setIsHovered(true);
+  };
+
+  const scheduleHide = () => {
+    if (hideTimerRef.current) {
+      clearTimeout(hideTimerRef.current);
+    }
+    hideTimerRef.current = setTimeout(() => setIsHovered(false), 320);
+  };
+
+  const updateButtonPosition = (event: PointerEvent<SVGPathElement>) => {
+    keepVisible();
+    setButtonPosition(screenToFlowPosition({ x: event.clientX, y: event.clientY }));
+  };
+
   const onDelete = (event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    (data as DeletableEdgeData | undefined)?.onDelete?.(id);
+    const onDeleteEdge = (data as DeletableEdgeData | undefined)?.onDelete;
+    if (onDeleteEdge) {
+      onDeleteEdge(id);
+      return;
+    }
+    setEdges((edges) => edges.filter((edge) => edge.id !== id));
   };
+
+  const position = buttonPosition ?? { x: labelX, y: labelY };
 
   return (
     <>
@@ -31,8 +69,9 @@ function DeletableEdge({ id, sourceX, sourceY, targetX, targetY, markerEnd, data
         fill="none"
         stroke="transparent"
         strokeWidth={18}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
+        onPointerEnter={updateButtonPosition}
+        onPointerMove={updateButtonPosition}
+        onPointerLeave={scheduleHide}
         style={{ pointerEvents: 'stroke' }}
       />
       <EdgeLabelRenderer>
@@ -40,12 +79,12 @@ function DeletableEdge({ id, sourceX, sourceY, targetX, targetY, markerEnd, data
           type="button"
           aria-label="剪断连线"
           onClick={onDelete}
-          onMouseEnter={() => setIsHovered(true)}
-          onMouseLeave={() => setIsHovered(false)}
+          onMouseEnter={keepVisible}
+          onMouseLeave={scheduleHide}
           className="nodrag nopan flex h-6 w-6 items-center justify-center rounded-full border border-red-300 bg-red-500 text-white shadow-md shadow-red-500/20 transition-all hover:scale-110 hover:bg-red-600"
           style={{
             position: 'absolute',
-            transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+            transform: `translate(-50%, -50%) translate(${position.x}px, ${position.y}px)`,
             opacity: isHovered ? 1 : 0,
             pointerEvents: isHovered ? 'auto' : 'none',
           }}
