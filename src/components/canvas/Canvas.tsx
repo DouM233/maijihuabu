@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type ComponentType } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import {
   ReactFlow,
   Background,
@@ -17,6 +17,7 @@ import {
   type Node,
   type NodeChange,
   type EdgeChange,
+  type EdgeTypes,
   type NodeTypes,
   type IsValidConnection,
   type NodeProps,
@@ -29,6 +30,7 @@ import { NODE_REGISTRY } from '@/lib/canvas/nodeRegistry';
 import type { PromptTemplate } from '@/lib/skillsData';
 import CanvasSidebar from './CanvasSidebar';
 import NodeActionBar from './NodeActionBar';
+import DeletableEdge from './edges/DeletableEdge';
 
 // 节点组件映射
 import ResizableTextNode from './nodes/ResizableTextNode';
@@ -189,6 +191,10 @@ const NODE_TYPES: NodeTypes = {
   'penguin-portrait': withNodeResizer(PenguinPortraitNode),
   'portrait-metadata': withNodeResizer(PortraitMetadataNode),
   'storyboard-grid': withNodeResizer(StoryboardGridNode),
+};
+
+const EDGE_TYPES: EdgeTypes = {
+  deletable: DeletableEdge,
 };
 
 interface SelectedSkillTemplate {
@@ -391,6 +397,24 @@ function CanvasInner({ onAddNodeRef, selectedSkillTemplate }: CanvasInnerProps) 
     setEdges((eds) => addEdge({ ...connection, animated: true }, eds));
   }, [pushHistory]);
 
+  const deleteEdge = useCallback((edgeId: string) => {
+    pushHistory();
+    setEdges((eds) => eds.filter((edge) => edge.id !== edgeId));
+  }, [pushHistory]);
+
+  const displayEdges = useMemo(
+    () =>
+      edges.map((edge) => ({
+        ...edge,
+        type: edge.type || 'deletable',
+        data: {
+          ...edge.data,
+          onDelete: deleteEdge,
+        },
+      })),
+    [deleteEdge, edges]
+  );
+
   const isValidConnection = useCallback((connection: Connection) => {
     const source = nodesRef.current.find((n) => n.id === connection.source);
     const target = nodesRef.current.find((n) => n.id === connection.target);
@@ -567,13 +591,14 @@ function CanvasInner({ onAddNodeRef, selectedSkillTemplate }: CanvasInnerProps) 
       <div className="flex-1 relative">
         <ReactFlow
           nodes={nodes}
-          edges={edges}
+          edges={displayEdges}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           isValidConnection={isValidConnection as IsValidConnection<Edge>}
           onSelectionChange={onSelectionChange}
           nodeTypes={NODE_TYPES}
+          edgeTypes={EDGE_TYPES}
           onDragOver={onDragOver}
           onDrop={onDrop}
           onPaneContextMenu={showContextMenu}
