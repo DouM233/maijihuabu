@@ -329,7 +329,7 @@ function CanvasInner({ onAddNodeRef, selectedSkillTemplate }: CanvasInnerProps) 
         data: {
           label: '图像生成',
           model: 'gpt-image-2',
-          size: '1024x1536',
+          size: '1200x1600',
           prompt: '',
           nodeWidth: 300,
           nodeHeight: 460,

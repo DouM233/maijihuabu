@@ -77,9 +77,13 @@ export function getNodeOutputs(node: Node | null | undefined): PortType[] {
   if (!node || !node.type) return [];
   if (node.type === 'upload') {
     const uploadType = (node.data as Record<string, unknown>)?.uploadType as 'image' | 'video' | 'audio' | undefined;
+    const data = node.data as Record<string, unknown>;
     if (uploadType === 'image') return ['image'];
     if (uploadType === 'video') return ['video'];
     if (uploadType === 'audio') return ['audio'];
+    if (data.imageUrl) return ['image'];
+    if (data.videoUrl) return ['video'];
+    if (data.audioUrl) return ['audio'];
     return [];
   }
   const ports = NODE_PORTS[node.type];

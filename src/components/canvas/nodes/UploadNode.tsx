@@ -41,7 +41,7 @@ function UploadNode({ id, data, selected }: NodeProps) {
           <div className="relative group">
             <img src={imageUrl} alt="upload" className="w-full h-32 object-cover rounded-lg border border-border" />
             <button
-              onClick={() => update({ imageUrl: undefined })}
+              onClick={() => update({ imageUrl: undefined, uploadType: undefined })}
               className="absolute top-1 right-1 w-5 h-5 rounded bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
             >
               <Trash2 className="w-3 h-3" />
@@ -57,7 +57,7 @@ function UploadNode({ id, data, selected }: NodeProps) {
                 const file = (e.target as HTMLInputElement).files?.[0];
                 if (!file) return;
                 const reader = new FileReader();
-                reader.onload = () => update({ imageUrl: reader.result as string });
+                reader.onload = () => update({ imageUrl: reader.result as string, uploadType: 'image' });
                 reader.readAsDataURL(file);
               };
               input.click();

@@ -1,7 +1,16 @@
 'use client';
 
 import { memo, useCallback } from 'react';
-import { Handle, Position, type NodeProps, useReactFlow, useNodes, useEdges } from '@xyflow/react';
+import {
+  Handle,
+  Position,
+  type Edge,
+  type Node,
+  type NodeProps,
+  useEdges,
+  useNodes,
+  useReactFlow,
+} from '@xyflow/react';
 import { Image as ImageIcon, Loader2, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ImageNodeData } from '@/lib/canvas/types';
@@ -12,10 +21,9 @@ const MODEL_OPTIONS = [
 ];
 
 const SIZE_OPTIONS = [
+  { value: '1080x1920', label: '9:16' },
+  { value: '1200x1600', label: '3:4' },
   { value: '1024x1024', label: '1:1' },
-  { value: '1024x1536', label: '2:3' },
-  { value: '1536x1024', label: '3:2' },
-  { value: '1792x1024', label: '16:9' },
 ];
 
 async function dataUrlToFile(dataUrl: string, fileName: string) {
@@ -24,9 +32,14 @@ async function dataUrlToFile(dataUrl: string, fileName: string) {
   return new File([blob], fileName, { type: blob.type || 'image/png' });
 }
 
+function getImageFromNode(node: Node) {
+  const data = node.data as Record<string, unknown>;
+  return (data.imageUrl as string | undefined) || (data.referenceImage as string | undefined);
+}
+
 function ImageNode({ id, data, selected }: NodeProps) {
   const nodeData = data as ImageNodeData;
-  const { updateNodeData } = useReactFlow();
+  const { addEdges, addNodes, getNode, updateNodeData } = useReactFlow();
   const nodes = useNodes();
   const edges = useEdges();
   const isRunning = nodeData.status === 'generating' || !!(nodeData as Record<string, unknown>)?.isRunning;
@@ -40,20 +53,28 @@ function ImageNode({ id, data, selected }: NodeProps) {
 
   const prompt = typeof nodeData.prompt === 'string' ? nodeData.prompt : '';
   const model = typeof nodeData.model === 'string' ? nodeData.model : 'gpt-image-2';
-  const size = typeof nodeData.size === 'string' ? nodeData.size : '1024x1024';
+  const rawSize = typeof nodeData.size === 'string' ? nodeData.size : '1200x1600';
+  const size = SIZE_OPTIONS.some((option) => option.value === rawSize) ? rawSize : '1200x1600';
   const imageUrl = nodeData.imageUrl;
   const error = nodeData.error;
-  const referenceImage = (nodeData as Record<string, unknown>)?.referenceImage as string | undefined;
+  const localReferenceImage = (nodeData as Record<string, unknown>)?.referenceImage as string | undefined;
   const title = nodeData.label || '图像生成';
-  const width = ((nodeData as Record<string, unknown>)?.nodeWidth as number | undefined) || 280;
-  const height = ((nodeData as Record<string, unknown>)?.nodeHeight as number | undefined) || 420;
-  const promptHeight = Math.max(64, Math.min(180, Math.floor((height - 330) * 0.35 + 64)));
-  const previewHeight = Math.max(120, height - 365 - promptHeight);
+  const width = ((nodeData as Record<string, unknown>)?.nodeWidth as number | undefined) || 320;
+  const height = ((nodeData as Record<string, unknown>)?.nodeHeight as number | undefined) || 520;
+  const previewHeight = Math.max(120, Math.floor(height * 0.24));
+  const promptHeight = Math.max(110, height - 310 - (imageUrl ? previewHeight : 0) - (error ? 44 : 0));
 
   const upstreamPromptNode = nodes.find(
-    (n) =>
-      (n.type === 'text' || n.type === 'llm') &&
-      edges.some((edge) => edge.source === n.id && edge.target === id)
+    (node) =>
+      (node.type === 'text' || node.type === 'llm') &&
+      edges.some((edge) => edge.source === node.id && edge.target === id)
+  );
+
+  const upstreamImageNodes = nodes.filter(
+    (node) =>
+      (node.type === 'upload' || node.type === 'image') &&
+      node.id !== id &&
+      edges.some((edge) => edge.source === node.id && edge.target === id)
   );
 
   const upstreamPromptData = upstreamPromptNode?.data as Record<string, unknown> | undefined;
@@ -61,6 +82,62 @@ function ImageNode({ id, data, selected }: NodeProps) {
     ? ((upstreamPromptData?.response as string) || '')
     : ((upstreamPromptData?.prompt as string) || '');
   const finalPrompt = prompt.trim() || upstreamTextValue.trim();
+  const upstreamReferenceImages = upstreamImageNodes.map(getImageFromNode).filter((url): url is string => Boolean(url));
+  const effectiveReferenceImage = localReferenceImage || upstreamReferenceImages[0];
+
+  const publishResultNode = useCallback((resultImageUrl: string) => {
+    const existingOutputEdge = edges.find((edge) => {
+      if (edge.source !== id) return false;
+      const target = nodes.find((node) => node.id === edge.target);
+      return target?.type === 'output' && (target.data as Record<string, unknown>)?.generatedFrom === id;
+    });
+
+    if (existingOutputEdge) {
+      updateNodeData(existingOutputEdge.target, {
+        label: '生成结果',
+        items: [resultImageUrl],
+        imageUrl: resultImageUrl,
+        prompt: finalPrompt,
+        sourceImageNodeId: id,
+        generatedFrom: id,
+        nodeWidth: 360,
+        nodeHeight: 520,
+      });
+      return;
+    }
+
+    const sourceNode = getNode(id);
+    const resultNodeId = `image_result_${Date.now()}`;
+    const resultNode: Node = {
+      id: resultNodeId,
+      type: 'output',
+      position: {
+        x: (sourceNode?.position.x ?? 0) + width + 80,
+        y: sourceNode?.position.y ?? 0,
+      },
+      data: {
+        label: '生成结果',
+        items: [resultImageUrl],
+        imageUrl: resultImageUrl,
+        prompt: finalPrompt,
+        sourceImageNodeId: id,
+        generatedFrom: id,
+        nodeWidth: 360,
+        nodeHeight: 520,
+      },
+    };
+    const resultEdge: Edge = {
+      id: `${id}-${resultNodeId}`,
+      source: id,
+      sourceHandle: 'image-out',
+      target: resultNodeId,
+      targetHandle: 'output-in',
+      animated: true,
+    };
+
+    addNodes(resultNode);
+    addEdges(resultEdge);
+  }, [addEdges, addNodes, edges, finalPrompt, getNode, id, nodes, updateNodeData, width]);
 
   const runGenerate = useCallback(async () => {
     if (isRunning) return;
@@ -74,12 +151,12 @@ function ImageNode({ id, data, selected }: NodeProps) {
     try {
       let result: { imageUrl?: string; error?: string };
 
-      if (referenceImage) {
+      if (effectiveReferenceImage) {
         const formData = new FormData();
         formData.append('model', model);
         formData.append('prompt', finalPrompt);
         formData.append('size', size);
-        formData.append('image', await dataUrlToFile(referenceImage, 'reference.png'));
+        formData.append('image', await dataUrlToFile(effectiveReferenceImage, 'reference.png'));
 
         const response = await fetch('/api/generate/edit', {
           method: 'POST',
@@ -110,6 +187,7 @@ function ImageNode({ id, data, selected }: NodeProps) {
         isRunning: false,
         error: undefined,
       });
+      publishResultNode(result.imageUrl);
     } catch (err) {
       update({
         status: 'error',
@@ -117,12 +195,12 @@ function ImageNode({ id, data, selected }: NodeProps) {
         error: err instanceof Error ? err.message : '生成失败',
       });
     }
-  }, [finalPrompt, isRunning, model, referenceImage, size, update]);
+  }, [effectiveReferenceImage, finalPrompt, isRunning, model, publishResultNode, size, update]);
 
   return (
     <div
       className={cn(
-        'rounded-xl border overflow-hidden shadow-sm transition-all min-w-[260px]',
+        'flex flex-col rounded-xl border bg-card shadow-sm transition-all min-w-[280px]',
         selected
           ? 'border-primary/60 shadow-[0_0_0_2px_rgba(139,111,246,0.15)]'
           : 'border-border hover:border-border/80'
@@ -130,57 +208,70 @@ function ImageNode({ id, data, selected }: NodeProps) {
       style={{
         width,
         height,
-        minWidth: 260,
-        minHeight: 360,
+        minWidth: 280,
+        minHeight: 420,
       }}
     >
-      {/* 标题栏 */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-card border-b border-border">
-        <span className="flex items-center justify-center w-5 h-5 rounded bg-amber-500/10 text-amber-500">
-          <ImageIcon className="w-3 h-3" />
+      <div className="flex shrink-0 items-center gap-2 border-b border-border bg-card px-3 py-2">
+        <span className="flex h-5 w-5 items-center justify-center rounded bg-amber-500/10 text-amber-500">
+          <ImageIcon className="h-3 w-3" />
         </span>
         <span className="text-xs font-semibold text-foreground">{title}</span>
-        <span className="ml-auto text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+        <span className="ml-auto rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
           {MODEL_OPTIONS.find((m) => m.value === model)?.label}
         </span>
       </div>
 
-      {/* 说明 */}
-      <div className="px-3 pt-2 text-[10px] text-muted-foreground leading-tight">
-        {upstreamPromptNode ? '已连接上游提示词节点' : '支持文生图/图生图/编辑'}
+      <div className="shrink-0 px-3 pt-2 text-[10px] leading-tight text-muted-foreground">
+        {upstreamPromptNode ? '已连接上游提示词节点' : '支持文生图 / 图生图 / 编辑'}
+        {effectiveReferenceImage && (
+          <span className="ml-1 rounded bg-primary/10 px-1 text-primary">
+            参考图 {upstreamReferenceImages.length || 1}
+          </span>
+        )}
       </div>
 
-      {/* 内容区 */}
-      <div className="px-3 py-2.5 bg-card/60 space-y-2.5">
-        {/* Prompt */}
+      <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto bg-card/60 px-3 py-2.5">
         <div>
           <textarea
             value={prompt}
-            onChange={(e) => update({ prompt: e.target.value })}
+            onChange={(event) => update({ prompt: event.target.value })}
             placeholder={upstreamTextValue || '描述想要的图像...'}
-            className="w-full h-16 resize-none bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+            className="w-full resize-none rounded-lg border border-border bg-background px-2.5 py-2 text-sm text-foreground shadow-inner placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
             style={{ height: promptHeight }}
           />
           {upstreamTextValue && (
-            <div className="text-[10px] text-muted-foreground mt-0.5">
-              本地 Prompt（可选，优先取上游补全结果）
+            <div className="mt-0.5 text-[10px] text-muted-foreground">
+              已接收上游补全结果，本地填写会优先覆盖
             </div>
           )}
         </div>
 
-        {/* 参考图 */}
-        <div className="border rounded-lg border-border/60 bg-muted/30 p-2">
-          <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1">
-            <span>参考图 · 上游+本地</span>
-            <span className="bg-muted px-1 rounded">{referenceImage ? 1 : 0}</span>
+        <div className="rounded-lg border border-border/60 bg-muted/30 p-2">
+          <div className="mb-1 flex items-center justify-between text-[10px] text-muted-foreground">
+            <span>参考图 · 上游 + 本地</span>
+            <span className="rounded bg-muted px-1">{effectiveReferenceImage ? upstreamReferenceImages.length || 1 : 0}</span>
           </div>
+          {upstreamReferenceImages.length > 0 && (
+            <div className="mb-1 grid grid-cols-3 gap-1">
+              {upstreamReferenceImages.slice(0, 3).map((url, index) => (
+                <img
+                  key={`${url}-${index}`}
+                  src={url}
+                  alt={`reference-${index + 1}`}
+                  className="h-12 w-full rounded border border-border object-cover"
+                />
+              ))}
+            </div>
+          )}
           <button
+            type="button"
             onClick={() => {
               const input = document.createElement('input');
               input.type = 'file';
               input.accept = 'image/*';
-              input.onchange = (e) => {
-                const file = (e.target as HTMLInputElement).files?.[0];
+              input.onchange = (event) => {
+                const file = (event.target as HTMLInputElement).files?.[0];
                 if (!file) return;
                 const reader = new FileReader();
                 reader.onload = () => update({ referenceImage: reader.result as string });
@@ -188,164 +279,95 @@ function ImageNode({ id, data, selected }: NodeProps) {
               };
               input.click();
             }}
-            className="w-full text-[10px] py-1 rounded bg-card border border-border text-foreground hover:bg-muted transition-colors"
+            className="w-full rounded border border-border bg-card py-1 text-[10px] text-foreground transition-colors hover:bg-muted"
           >
-            + 上传参考图
+            + 上传本地参考图
           </button>
         </div>
 
-        {/* 模型选择 */}
         <div>
           <label className="text-[10px] text-muted-foreground">模型</label>
-          <div className="flex gap-1 mt-1">
-            {MODEL_OPTIONS.map((m) => (
+          <div className="mt-1 flex gap-1">
+            {MODEL_OPTIONS.map((option) => (
               <button
-                key={m.value}
-                onClick={() => update({ model: m.value })}
+                key={option.value}
+                type="button"
+                onClick={() => update({ model: option.value })}
                 className={cn(
-                  'flex-1 text-[10px] py-1 rounded-md border transition-colors',
-                  model === m.value
-                    ? 'bg-primary/10 border-primary/40 text-primary'
-                    : 'bg-card border-border text-muted-foreground hover:bg-muted'
+                  'flex-1 rounded-md border py-1 text-[10px] transition-colors',
+                  model === option.value
+                    ? 'border-primary/40 bg-primary/10 text-primary'
+                    : 'border-border bg-card text-muted-foreground hover:bg-muted'
                 )}
               >
-                {m.label}
+                {option.label}
               </button>
             ))}
           </div>
         </div>
 
-        {/* 尺寸 */}
         <div>
           <label className="text-[10px] text-muted-foreground">尺寸</label>
-          <div className="flex gap-1 mt-1">
-            {SIZE_OPTIONS.map((s) => (
+          <div className="mt-1 flex gap-1">
+            {SIZE_OPTIONS.map((option) => (
               <button
-                key={s.value}
-                onClick={() => update({ size: s.value })}
+                key={option.value}
+                type="button"
+                onClick={() => update({ size: option.value })}
                 className={cn(
-                  'flex-1 text-[10px] py-1 rounded-md border transition-colors',
-                  size === s.value
-                    ? 'bg-primary/10 border-primary/40 text-primary'
-                    : 'bg-card border-border text-muted-foreground hover:bg-muted'
+                  'flex-1 rounded-md border py-1 text-[10px] transition-colors',
+                  size === option.value
+                    ? 'border-primary/40 bg-primary/10 text-primary'
+                    : 'border-border bg-card text-muted-foreground hover:bg-muted'
                 )}
               >
-                {s.label}
+                {option.label}
               </button>
             ))}
           </div>
         </div>
 
-        {/* 图片预览 */}
         {imageUrl && (
-          <div className="rounded-lg overflow-hidden border border-border">
-            <img
-              src={imageUrl}
-              alt="generated"
-              className="w-full object-contain"
-              style={{ maxHeight: previewHeight }}
-            />
+          <div className="overflow-hidden rounded-lg border border-border">
+            <img src={imageUrl} alt="generated" className="w-full object-contain" style={{ maxHeight: previewHeight }} />
           </div>
         )}
 
-        {/* 运行状态 */}
         {isRunning && (
           <div className="flex items-center gap-2 text-xs text-primary">
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
             <span>正在生成...</span>
           </div>
         )}
-      </div>
 
-      {/* 底部生成按钮 */}
-      {error && (
-        <div className="px-3 pb-2 bg-card/60">
+        {error && (
           <div className="rounded-md bg-destructive/10 px-2 py-1 text-xs text-destructive">
             {error}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      <div className="px-3 pb-3 bg-card/60">
+      <div className="shrink-0 bg-card/60 px-3 pb-3">
         <button
+          type="button"
           onClick={runGenerate}
           disabled={isRunning || !finalPrompt}
           className={cn(
-            'w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-colors',
-            isRunning
-              ? 'bg-muted text-muted-foreground cursor-not-allowed'
+            'flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-medium transition-colors',
+            isRunning || !finalPrompt
+              ? 'cursor-not-allowed bg-muted text-muted-foreground'
               : 'bg-primary/10 text-primary hover:bg-primary/20'
           )}
         >
-          {isRunning ? (
-            <>
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              生成中...
-            </>
-          ) : (
-            <>
-              <Zap className="w-3.5 h-3.5" />
-              生成
-            </>
-          )}
+          {isRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+          {isRunning ? '生成中...' : '生成'}
         </button>
       </div>
 
-      {/* 输入端口 */}
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="image-in"
-        style={{
-          top: '50%',
-          width: 10,
-          height: 10,
-          background: '#06b6d4',
-          border: '2px solid #fff',
-          boxShadow: '0 0 4px rgba(6,182,212,0.4)',
-        }}
-      />
-      <Handle
-        type="target"
-        position={Position.Top}
-        id="image-in-top"
-        style={{
-          left: '50%',
-          width: 10,
-          height: 10,
-          background: '#06b6d4',
-          border: '2px solid #fff',
-          boxShadow: '0 0 4px rgba(6,182,212,0.4)',
-        }}
-      />
-
-      {/* 输出端口 */}
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="image-out"
-        style={{
-          top: '50%',
-          width: 10,
-          height: 10,
-          background: '#06b6d4',
-          border: '2px solid #fff',
-          boxShadow: '0 0 4px rgba(6,182,212,0.4)',
-        }}
-      />
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        id="image-out-bottom"
-        style={{
-          left: '50%',
-          width: 10,
-          height: 10,
-          background: '#06b6d4',
-          border: '2px solid #fff',
-          boxShadow: '0 0 4px rgba(6,182,212,0.4)',
-        }}
-      />
+      <Handle type="target" position={Position.Left} id="image-in" className="!h-2.5 !w-2.5 !border-2 !border-white !bg-cyan-500" />
+      <Handle type="target" position={Position.Top} id="image-in-top" className="!h-2.5 !w-2.5 !border-2 !border-white !bg-cyan-500" />
+      <Handle type="source" position={Position.Right} id="image-out" className="!h-2.5 !w-2.5 !border-2 !border-white !bg-cyan-500" />
+      <Handle type="source" position={Position.Bottom} id="image-out-bottom" className="!h-2.5 !w-2.5 !border-2 !border-white !bg-cyan-500" />
     </div>
   );
 }

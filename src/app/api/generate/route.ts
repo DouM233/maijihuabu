@@ -16,6 +16,8 @@ export async function POST(request: NextRequest) {
     // 尺寸映射：前端尺寸ID → API 尺寸值
     const sizeMap: Record<string, string> = {
       'auto': 'auto',
+      '1080x1920': '1080x1920',
+      '1200x1600': '1200x1600',
       '1024x1024': '1024x1024',
       '1536x1024': '1536x1024',
       '1024x1536': '1024x1536',
