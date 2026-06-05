@@ -155,6 +155,37 @@ function parseExampleTemplate(fileName: string, markdown: string) {
   };
 }
 
+function buildSkillBundlePrompt(
+  meta: SkillMeta,
+  skillMarkdown: string,
+  templates: Array<{ title: string; prompt: string }>,
+  negativePrompt: string
+) {
+  const templateLibrary = templates.length
+    ? templates
+        .map((template, index) => [
+          `## 内部模板 ${index + 1}：${template.title}`,
+          template.prompt,
+        ].join('\n'))
+        .join('\n\n---\n\n')
+    : '此 Skill 未提供独立模板，请优先遵循 SKILL.md 的规则。';
+
+  return [
+    `# Skill 大包：${meta.name}`,
+    '',
+    '你正在使用的是一个完整 Skill 包。下面的 SKILL.md、内部模板库和负面约束必须作为同一个技能整体理解，不要把内部模板当作独立 Skill。',
+    '',
+    '## SKILL.md',
+    skillMarkdown.trim(),
+    '',
+    '## 内部模板库',
+    templateLibrary,
+    '',
+    '## 负面约束',
+    negativePrompt.trim() || '无',
+  ].join('\n');
+}
+
 async function readTextIfExists(filePath: string) {
   try {
     return await readFile(filePath, 'utf8');
@@ -199,24 +230,17 @@ async function loadSkillFolder(root: string, folderName: string) {
     // Examples are optional.
   }
 
-  if (rawTemplates.length === 0) {
-    rawTemplates.push({
-      title: meta.name,
-      prompt: `${skillMarkdown}\n\n${negativePrompt}`.trim(),
-    });
-  }
-
-  return rawTemplates.map<PromptTemplate>((template, index) => ({
-    id: `${meta.id}-${slugify(template.title)}-${index + 1}`,
+  return [{
+    id: slugify(folderName),
     category: meta.category,
     subCategory: meta.subCategory,
     visualStyle: meta.visualStyle,
-    styleName: template.title,
-    prompt: template.prompt,
+    styleName: meta.name,
+    prompt: buildSkillBundlePrompt(meta, skillMarkdown, rawTemplates, negativePrompt),
     coverUrl: null,
     negativePrompt,
     tags: [...new Set([...meta.tags, meta.subCategory])],
-  }));
+  }] satisfies PromptTemplate[];
 }
 
 function buildCategoryTree(templates: PromptTemplate[]): CategoryNode[] {

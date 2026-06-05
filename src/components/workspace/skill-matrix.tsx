@@ -198,7 +198,7 @@ function TemplateCard({
         {/* hover 遮罩 */}
         <div className="absolute inset-0 flex items-center justify-center bg-primary/0 group-hover:bg-primary/30 transition-colors">
           <span className="rounded-full bg-card px-3 py-1.5 text-xs font-bold text-primary opacity-0 group-hover:opacity-100 transition-opacity shadow-sm">
-            选择此风格
+            选择此 Skill
           </span>
         </div>
       </div>
@@ -356,7 +356,7 @@ export function SkillMatrix({ onSelectTemplate, mode = 'full', width, treeWidth:
             )}
           />
           <Sparkles className={cn('h-3.5 w-3.5 shrink-0', !selectedCategory && !categorySearch ? 'text-primary' : 'text-muted-foreground')} />
-          <span className="text-xs font-semibold">全部模板</span>
+          <span className="text-xs font-semibold">全部 Skill</span>
         </button>
         <div className="mt-1 flex flex-col gap-1">
           {filteredCategoryTree.map((node) => (
@@ -379,7 +379,7 @@ export function SkillMatrix({ onSelectTemplate, mode = 'full', width, treeWidth:
       <div className="flex items-center justify-between border-b border-border px-5 py-3">
         <div className="flex items-center gap-3">
           <h3 className="text-sm font-semibold text-foreground">
-            {selectedCategory ?? '全部模板'}
+            {selectedCategory ?? '全部 Skill'}
           </h3>
           <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
             {filteredTemplates.length} 套
@@ -418,7 +418,7 @@ export function SkillMatrix({ onSelectTemplate, mode = 'full', width, treeWidth:
       </div>
       <div className="flex-1 overflow-y-auto p-5">
         {filteredTemplates.length === 0 ? (
-          <div className="flex h-full items-center justify-center text-sm text-muted-foreground/60">没有匹配的模板</div>
+          <div className="flex h-full items-center justify-center text-sm text-muted-foreground/60">没有匹配的 Skill</div>
         ) : (
           <div className="grid grid-cols-2 gap-4">
             {filteredTemplates.map((tpl) => (
@@ -495,6 +495,7 @@ export function SkillMatrix({ onSelectTemplate, mode = 'full', width, treeWidth:
       <SkillDetailDrawer
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
+        template={activeTemplate}
         onApply={() => {
           setDrawerOpen(false);
           if (activeTemplate) onSelectTemplate(activeTemplate);
