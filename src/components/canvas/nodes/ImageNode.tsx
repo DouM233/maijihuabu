@@ -26,6 +26,8 @@ const SIZE_OPTIONS = [
   { value: '1024x1024', label: '1:1' },
 ];
 
+const GENERATE_TIMEOUT_MS = 6 * 60 * 1000;
+
 function getOutputNodeSize(size: string) {
   if (size === '1088x1936') return { nodeWidth: 294, nodeHeight: 520 };
   if (size === '1024x1024') return { nodeWidth: 420, nodeHeight: 420 };
@@ -36,6 +38,24 @@ async function dataUrlToFile(dataUrl: string, fileName: string) {
   const response = await fetch(dataUrl);
   const blob = await response.blob();
   return new File([blob], fileName, { type: blob.type || 'image/png' });
+}
+
+async function fetchGenerationResult(url: string, init: RequestInit, fallbackError: string) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), GENERATE_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, { ...init, signal: controller.signal });
+    const result = await response.json().catch(() => ({ error: fallbackError }));
+    return { response, result: result as { imageUrl?: string; error?: string } };
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error('生成请求超时，请稍后重试。');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 function getImageFromNode(node: Node) {
@@ -185,14 +205,14 @@ function ImageNode({ id, data, selected }: NodeProps) {
           formData.append('image', await dataUrlToFile(effectiveReferenceImages[index], `reference-${index + 1}.png`));
         }
 
-        const response = await fetch('/api/generate/edit', {
+        const { response, result: editResult } = await fetchGenerationResult('/api/generate/edit', {
           method: 'POST',
           body: formData,
-        });
-        result = await response.json().catch(() => ({ error: '图生图接口没有返回有效 JSON' }));
+        }, '图生图接口没有返回有效 JSON');
+        result = editResult;
         if (!response.ok) throw new Error(result.error || `图生图失败：HTTP ${response.status}`);
       } else {
-        const response = await fetch('/api/generate', {
+        const { response, result: textResult } = await fetchGenerationResult('/api/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -200,8 +220,8 @@ function ImageNode({ id, data, selected }: NodeProps) {
             prompt: finalPrompt,
             size,
           }),
-        });
-        result = await response.json().catch(() => ({ error: '文生图接口没有返回有效 JSON' }));
+        }, '文生图接口没有返回有效 JSON');
+        result = textResult;
         if (!response.ok) throw new Error(result.error || `文生图失败：HTTP ${response.status}`);
       }
 

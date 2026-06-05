@@ -9,8 +9,8 @@ create table if not exists public.canvases (
   edges_json jsonb not null default '[]'::jsonb,
   viewport_json jsonb not null default '{"x":0,"y":0,"zoom":1}'::jsonb,
   node_count integer not null default 0,
-  created_at bigint not null,
-  updated_at bigint not null,
+  created_at bigint not null default ((extract(epoch from now()) * 1000)::bigint),
+  updated_at bigint not null default ((extract(epoch from now()) * 1000)::bigint),
   deleted_at bigint
 );
 
@@ -34,8 +34,16 @@ create table if not exists public.assets (
   height integer,
   prompt text,
   metadata_json jsonb,
-  created_at bigint not null
+  created_at bigint default ((extract(epoch from now()) * 1000)::bigint)
 );
+
+alter table if exists public.assets
+  alter column created_at drop not null,
+  alter column created_at set default ((extract(epoch from now()) * 1000)::bigint);
+
+alter table if exists public.canvases
+  alter column created_at set default ((extract(epoch from now()) * 1000)::bigint),
+  alter column updated_at set default ((extract(epoch from now()) * 1000)::bigint);
 
 create index if not exists assets_canvas_id_idx
   on public.assets (canvas_id);
@@ -51,8 +59,8 @@ create table if not exists public.skill_packages (
   storage_prefix text,
   manifest_json jsonb,
   enabled boolean not null default true,
-  created_at bigint not null,
-  updated_at bigint not null
+  created_at bigint not null default ((extract(epoch from now()) * 1000)::bigint),
+  updated_at bigint not null default ((extract(epoch from now()) * 1000)::bigint)
 );
 
 create table if not exists public.skill_templates (
@@ -67,8 +75,8 @@ create table if not exists public.skill_templates (
   tags jsonb not null default '[]'::jsonb,
   preview_asset_ids jsonb not null default '[]'::jsonb,
   enabled boolean not null default true,
-  created_at bigint not null,
-  updated_at bigint not null
+  created_at bigint not null default ((extract(epoch from now()) * 1000)::bigint),
+  updated_at bigint not null default ((extract(epoch from now()) * 1000)::bigint)
 );
 
 create index if not exists skill_templates_package_id_idx

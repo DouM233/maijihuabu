@@ -311,7 +311,8 @@ function CanvasInner({ onAddNodeRef, selectedSkillTemplate }: CanvasInnerProps) 
   const nodesRef = useRef<Node[]>([]);
   const edgesRef = useRef<Edge[]>([]);
   const undoStackRef = useRef<CanvasSnapshot[]>([]);
-  const skipCanvasLoadRef = useRef<string | null>(null);
+  const currentCanvasIdRef = useRef<string | null>(null);
+  const isSavingCanvasRef = useRef(false);
   useEffect(() => { nodesRef.current = nodes; }, [nodes]);
   useEffect(() => { edgesRef.current = edges; }, [edges]);
 
@@ -331,8 +332,7 @@ function CanvasInner({ onAddNodeRef, selectedSkillTemplate }: CanvasInnerProps) 
 
   useEffect(() => {
     if (!activeCanvasId) return;
-    if (skipCanvasLoadRef.current === activeCanvasId) {
-      skipCanvasLoadRef.current = null;
+    if (isSavingCanvasRef.current || currentCanvasIdRef.current === activeCanvasId) {
       return;
     }
 
@@ -341,6 +341,7 @@ function CanvasInner({ onAddNodeRef, selectedSkillTemplate }: CanvasInnerProps) 
     void loadCanvas(activeCanvasId)
       .then((canvas) => {
         if (cancelled || !canvas) return;
+        currentCanvasIdRef.current = canvas.id;
         setCanvasName(canvas.name);
         setNodes(canvas.nodes.map((node) => ({ ...node, selected: false })) as Node[]);
         setEdges(canvas.edges.map(stripRuntimeEdgeData) as Edge[]);
@@ -670,19 +671,21 @@ function CanvasInner({ onAddNodeRef, selectedSkillTemplate }: CanvasInnerProps) 
     setEdges([]);
     setSelectedIds([]);
     undoStackRef.current = [];
+    currentCanvasIdRef.current = created.id;
     setViewport({ x: 0, y: 0, zoom: 1 });
     setLastSavedAt(created.updatedAt);
   }, [createCanvas, pushHistory, setViewport]);
 
   const handleSaveCanvas = useCallback(async () => {
     setIsSavingCanvas(true);
+    isSavingCanvasRef.current = true;
     try {
       let canvasId = activeCanvasId;
       if (!canvasId) {
         const created = await createCanvas(canvasName.trim() || '未命名画板');
         if (!created) return;
         canvasId = created.id;
-        skipCanvasLoadRef.current = created.id;
+        currentCanvasIdRef.current = created.id;
       }
 
       const canvas: CanvasData = {
@@ -696,10 +699,12 @@ function CanvasInner({ onAddNodeRef, selectedSkillTemplate }: CanvasInnerProps) 
       };
       const saved = await saveCanvas(canvas);
       if (saved) {
+        currentCanvasIdRef.current = saved.id;
         setCanvasName(saved.name);
         setLastSavedAt(saved.updatedAt);
       }
     } finally {
+      isSavingCanvasRef.current = false;
       setIsSavingCanvas(false);
     }
   }, [activeCanvasId, canvasName, createCanvas, getViewport, saveCanvas]);
