@@ -21,7 +21,7 @@ const MODEL_OPTIONS = [
 ];
 
 const SIZE_OPTIONS = [
-  { value: '1080x1920', label: '9:16' },
+  { value: '1088x1936', label: '9:16' },
   { value: '1200x1600', label: '3:4' },
   { value: '1024x1024', label: '1:1' },
 ];
@@ -83,7 +83,10 @@ function ImageNode({ id, data, selected }: NodeProps) {
     : ((upstreamPromptData?.prompt as string) || '');
   const finalPrompt = prompt.trim() || upstreamTextValue.trim();
   const upstreamReferenceImages = upstreamImageNodes.map(getImageFromNode).filter((url): url is string => Boolean(url));
-  const effectiveReferenceImage = localReferenceImage || upstreamReferenceImages[0];
+  const effectiveReferenceImages = [
+    ...(localReferenceImage ? [localReferenceImage] : []),
+    ...upstreamReferenceImages,
+  ].slice(0, 16);
 
   const publishResultNode = useCallback((resultImageUrl: string) => {
     const existingOutputEdge = edges.find((edge) => {
@@ -151,12 +154,14 @@ function ImageNode({ id, data, selected }: NodeProps) {
     try {
       let result: { imageUrl?: string; error?: string };
 
-      if (effectiveReferenceImage) {
+      if (effectiveReferenceImages.length > 0) {
         const formData = new FormData();
         formData.append('model', model);
         formData.append('prompt', finalPrompt);
         formData.append('size', size);
-        formData.append('image', await dataUrlToFile(effectiveReferenceImage, 'reference.png'));
+        for (let index = 0; index < effectiveReferenceImages.length; index += 1) {
+          formData.append('image', await dataUrlToFile(effectiveReferenceImages[index], `reference-${index + 1}.png`));
+        }
 
         const response = await fetch('/api/generate/edit', {
           method: 'POST',
@@ -195,7 +200,7 @@ function ImageNode({ id, data, selected }: NodeProps) {
         error: err instanceof Error ? err.message : '生成失败',
       });
     }
-  }, [effectiveReferenceImage, finalPrompt, isRunning, model, publishResultNode, size, update]);
+  }, [effectiveReferenceImages, finalPrompt, isRunning, model, publishResultNode, size, update]);
 
   return (
     <div
@@ -224,9 +229,9 @@ function ImageNode({ id, data, selected }: NodeProps) {
 
       <div className="shrink-0 px-3 pt-2 text-[10px] leading-tight text-muted-foreground">
         {upstreamPromptNode ? '已连接上游提示词节点' : '支持文生图 / 图生图 / 编辑'}
-        {effectiveReferenceImage && (
+        {effectiveReferenceImages.length > 0 && (
           <span className="ml-1 rounded bg-primary/10 px-1 text-primary">
-            参考图 {upstreamReferenceImages.length || 1}
+            参考图 {effectiveReferenceImages.length}
           </span>
         )}
       </div>
@@ -250,11 +255,11 @@ function ImageNode({ id, data, selected }: NodeProps) {
         <div className="rounded-lg border border-border/60 bg-muted/30 p-2">
           <div className="mb-1 flex items-center justify-between text-[10px] text-muted-foreground">
             <span>参考图 · 上游 + 本地</span>
-            <span className="rounded bg-muted px-1">{effectiveReferenceImage ? upstreamReferenceImages.length || 1 : 0}</span>
+            <span className="rounded bg-muted px-1">{effectiveReferenceImages.length}</span>
           </div>
-          {upstreamReferenceImages.length > 0 && (
+          {effectiveReferenceImages.length > 0 && (
             <div className="mb-1 grid grid-cols-3 gap-1">
-              {upstreamReferenceImages.slice(0, 3).map((url, index) => (
+              {effectiveReferenceImages.slice(0, 3).map((url, index) => (
                 <img
                   key={`${url}-${index}`}
                   src={url}

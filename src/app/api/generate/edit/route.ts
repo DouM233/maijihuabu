@@ -8,7 +8,10 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const prompt = formData.get('prompt') as string;
-    const imageFile = formData.get('image') as File | null;
+    const imageFiles = formData
+      .getAll('image')
+      .filter((value): value is File => value instanceof File && value.size > 0)
+      .slice(0, 16);
     const size = (formData.get('size') as string) || '1024x1024';
     const quality = formData.get('quality') as string | null;
     const model = (formData.get('model') as string) || 'gpt-image-2';
@@ -17,14 +20,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'prompt 参数必填' }, { status: 400 });
     }
 
-    if (!imageFile) {
+    if (imageFiles.length === 0) {
       return NextResponse.json({ error: '参考图必填（图生图模式）' }, { status: 400 });
     }
 
     // 尺寸映射
     const sizeMap: Record<string, string> = {
       'auto': 'auto',
-      '1080x1920': '1080x1920',
+      '1080x1920': '1088x1936',
+      '1088x1936': '1088x1936',
       '1200x1600': '1200x1600',
       '1024x1024': '1024x1024',
       '1536x1024': '1536x1024',
@@ -37,7 +41,9 @@ export async function POST(request: NextRequest) {
     const sendFormData = new FormData();
     sendFormData.append('model', model);
     sendFormData.append('prompt', prompt);
-    sendFormData.append('image', imageFile);
+    for (const imageFile of imageFiles) {
+      sendFormData.append('image', imageFile);
+    }
     sendFormData.append('size', apiSize);
     sendFormData.append('n', '1');
     // 注意：edits 端点不支持 response_format 参数，默认返回 URL
@@ -52,8 +58,9 @@ export async function POST(request: NextRequest) {
       size: apiSize,
       quality: quality || 'default',
       promptLength: prompt.length,
-      imageFileName: imageFile.name,
-      imageSize: imageFile.size,
+      imageCount: imageFiles.length,
+      imageFileNames: imageFiles.map((file) => file.name),
+      totalImageSize: imageFiles.reduce((sum, file) => sum + file.size, 0),
     });
 
     const response = await fetch(EDIT_API_URL, {
