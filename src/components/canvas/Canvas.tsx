@@ -715,31 +715,38 @@ function CanvasInner({ onAddNodeRef, selectedSkillTemplate }: CanvasInnerProps) 
 
       {/* 画布区域 */}
       <div className="flex-1 relative">
-        <div className="absolute left-4 top-3 z-20 flex items-center gap-2 rounded-2xl border border-border bg-card/92 px-3 py-2 text-xs shadow-lg backdrop-blur-md">
-          <input
-            value={canvasName}
-            onChange={(event) => setCanvasName(event.target.value)}
-            className="nodrag nopan h-8 w-48 rounded-lg border border-border bg-background px-3 text-sm font-medium text-foreground outline-none transition focus:border-primary"
-            placeholder="画板名称"
-          />
-          <button
-            type="button"
-            onClick={handleNewCanvas}
-            className="nodrag nopan inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-background px-3 font-medium text-foreground transition hover:border-primary/60 hover:text-primary"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            新建
-          </button>
-          <button
-            type="button"
-            onClick={handleSaveCanvas}
-            disabled={isSavingCanvas}
-            className="nodrag nopan inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 font-medium text-primary-foreground shadow-sm transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <Save className="h-3.5 w-3.5" />
-            {isSavingCanvas ? '保存中' : '保存'}
-          </button>
-          <span className="min-w-20 text-muted-foreground">{savedStatus}</span>
+        <div className="pointer-events-none absolute left-[15rem] right-4 top-3 z-30 flex justify-start">
+          <div className="pointer-events-auto flex max-w-full items-center gap-2 rounded-2xl border border-amber-200/70 bg-[#fffaf1]/95 px-2.5 py-2 text-xs shadow-[0_18px_45px_rgba(92,64,33,0.14)] backdrop-blur-md">
+            <div className="flex min-w-0 items-center gap-2 rounded-xl border border-border/80 bg-background/80 px-2.5 py-1.5">
+              <span className="hidden rounded-full bg-primary/10 px-2 py-1 text-[11px] font-semibold text-primary xl:inline">
+                整张画板
+              </span>
+              <input
+                value={canvasName}
+                onChange={(event) => setCanvasName(event.target.value)}
+                className="nodrag nopan h-7 w-44 min-w-0 bg-transparent text-sm font-semibold text-foreground outline-none placeholder:text-muted-foreground sm:w-56"
+                placeholder="画板名称"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={handleNewCanvas}
+              className="nodrag nopan inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-border/80 bg-background/85 px-3 font-medium text-foreground transition hover:border-primary/60 hover:bg-primary/5 hover:text-primary"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              新建
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveCanvas}
+              disabled={isSavingCanvas}
+              className="nodrag nopan inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl bg-primary px-3.5 font-semibold text-primary-foreground shadow-sm shadow-primary/20 transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Save className="h-3.5 w-3.5" />
+              {isSavingCanvas ? '保存中' : '保存'}
+            </button>
+            <span className="hidden min-w-24 shrink-0 text-muted-foreground md:inline">{savedStatus}</span>
+          </div>
         </div>
 
         <ReactFlow
