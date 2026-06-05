@@ -1,0 +1,4 @@
+interface:
+  display_name: "Dark Massage Skill"
+  short_description: "Draft premium dark massage product image prompts"
+  default_prompt: "Use $dark-massage-skill to draft a warm dark ecommerce lifestyle image prompt for a mint-green massage cushion."

@@ -263,16 +263,35 @@ body {
   box-shadow: 0 0 0 2px rgba(139, 111, 246, 0.2), 0 4px 12px rgba(139, 111, 246, 0.1) !important;
 }
 
-.xyflow__node-output {
+.xyflow__node-output,
+.react-flow__node-output {
   background: transparent !important;
-  border-color: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
   box-shadow: none !important;
+  outline: none !important;
+  padding: 0 !important;
 }
 
-.xyflow__node-output.selected {
+.xyflow__node-output.selected,
+.react-flow__node-output.selected,
+.xyflow__node-output:focus,
+.react-flow__node-output:focus,
+.xyflow__node-output:focus-visible,
+.react-flow__node-output:focus-visible {
   background: transparent !important;
-  border-color: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
   box-shadow: none !important;
+  outline: none !important;
+  padding: 0 !important;
+}
+
+.xyflow__node-output .xyflow__resize-control.line,
+.xyflow__node-output .react-flow__resize-control.line,
+.react-flow__node-output .xyflow__resize-control.line,
+.react-flow__node-output .react-flow__resize-control.line {
+  border-color: transparent !important;
 }
 
 .xyflow__handle {

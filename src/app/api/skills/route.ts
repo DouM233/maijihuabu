@@ -43,6 +43,11 @@ const ALLOWED_REFERENCE_FILES = new Set([
   'negative-prompts.md',
 ]);
 
+const BUNDLED_SKILLS_ROOTS = [
+  path.join(process.cwd(), 'skills'),
+  path.join(process.cwd(), 'assets', 'skills'),
+];
+
 function slugify(value: string) {
   return value
     .trim()
@@ -270,37 +275,45 @@ function buildCategoryTree(templates: PromptTemplate[]): CategoryNode[] {
 }
 
 export async function GET() {
-  const root = process.env.SKILLS_ROOT?.trim();
-  if (!root) {
-    return NextResponse.json({
-      templates: PROMPT_TEMPLATES,
-      categoryTree: CATEGORY_TREE,
-      root: null,
-      count: PROMPT_TEMPLATES.length,
-      warning: 'SKILLS_ROOT is not configured; using built-in fallback skills.',
-    });
+  const envRoot = process.env.SKILLS_ROOT?.trim();
+  const attemptedRoots: string[] = [];
+  const candidateRoots = [
+    ...(envRoot ? [envRoot] : []),
+    ...BUNDLED_SKILLS_ROOTS,
+  ];
+
+  for (const root of candidateRoots) {
+    attemptedRoots.push(root);
+
+    try {
+      const entries = await readdir(root);
+      const templateGroups = await Promise.all(entries.map((entry) => loadSkillFolder(root, entry)));
+      const templates = templateGroups.flat();
+
+      if (templates.length === 0) {
+        continue;
+      }
+
+      return NextResponse.json({
+        templates,
+        categoryTree: buildCategoryTree(templates),
+        root,
+        attemptedRoots,
+        count: templates.length,
+        source: root === envRoot ? 'env' : 'bundled',
+      });
+    } catch {
+      // Try the next source. Coze deployments cannot read a Windows SKILLS_ROOT.
+    }
   }
 
-  try {
-    const entries = await readdir(root);
-    const templateGroups = await Promise.all(entries.map((entry) => loadSkillFolder(root, entry)));
-    const templates = templateGroups.flat();
-
-    return NextResponse.json({
-      templates,
-      categoryTree: buildCategoryTree(templates),
-      root,
-      count: templates.length,
-    });
-  } catch (error) {
-    return NextResponse.json({
-      templates: PROMPT_TEMPLATES,
-      categoryTree: CATEGORY_TREE,
-      root,
-      count: PROMPT_TEMPLATES.length,
-      warning: error instanceof Error
-        ? `Failed to load SKILLS_ROOT; using built-in fallback skills. ${error.message}`
-        : 'Failed to load SKILLS_ROOT; using built-in fallback skills.',
-    });
-  }
+  return NextResponse.json({
+    templates: PROMPT_TEMPLATES,
+    categoryTree: CATEGORY_TREE,
+    root: null,
+    attemptedRoots,
+    count: PROMPT_TEMPLATES.length,
+    source: 'fallback',
+    warning: 'No external or bundled skills were found; using built-in fallback skills.',
+  });
 }

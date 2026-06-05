@@ -22,10 +22,7 @@ function OutputNode({ data, selected }: NodeProps) {
     return (
       <>
         <div
-          className={cn(
-            'group relative h-full w-full overflow-visible bg-transparent',
-            selected && 'rounded-lg ring-2 ring-primary/50'
-          )}
+          className="group relative h-full w-full overflow-visible bg-transparent"
           style={{ width, height, minWidth: 180, minHeight: 180 }}
         >
           <img
@@ -35,7 +32,7 @@ function OutputNode({ data, selected }: NodeProps) {
               event.stopPropagation();
               setFullscreen(true);
             }}
-            className="h-full w-full cursor-zoom-in rounded-lg object-cover"
+            className="h-full w-full cursor-zoom-in object-cover"
           />
           {prompt && (
             <button

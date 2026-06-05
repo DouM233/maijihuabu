@@ -1,0 +1,3 @@
+display_name: Shaver Style Skill (剃须刀品类通用视觉框架)
+short_description: Generate scene/lighting/composition prompts for shaver ecommerce photography without hardcoding product appearance.
+default_prompt: Use the shaver style skill to generate a standardized prompt package. Select the closest shot-type preset, lock the scene/lighting/composition/quality rules, leave product appearance as variables to be filled from the user's white-background product reference image. Output all six required sections: analysis summary, Chinese prompt, English prompt, negative prompt, adjustable variables, and consistency check.

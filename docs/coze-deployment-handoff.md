@@ -230,17 +230,19 @@ Suggested fields:
 Current code:
 
 - `src/app/api/skills/route.ts`
-- It reads local folders from `process.env.SKILLS_ROOT`.
+- It reads local folders from `process.env.SKILLS_ROOT` first.
+- If `SKILLS_ROOT` is missing or unreadable, it falls back to bundled repo folders under `skills/` and then `assets/skills/`.
 - It parses skill folders such as `dark-massage-skill` and `schneider-shaver-skill`.
 
-Current behavior is good for local development but not ideal for Coze production because server local filesystem may not be durable.
+Current behavior is good for first Coze deployment smoke tests because the two trained skill packages are bundled in `skills/`.
+It is still not the final production design because server local filesystem may not be durable for future uploaded packages.
 
 Recommended P0 options:
 
 Option A, simplest first deployment:
 
-- Bundle skill packages with deployment or mount a server path if Coze supports it.
-- Keep `SKILLS_ROOT` as an environment variable.
+- Keep the current bundled `skills/` directory in GitHub.
+- Optionally set `SKILLS_ROOT` only when Coze provides a reliable server path or mounted folder.
 - This is acceptable only for first smoke test.
 
 Option B, better production design:
@@ -266,7 +268,7 @@ Current AI API variables:
 
 - `CHAT_API_URL`
 - `CHAT_API_KEY`
-- `SKILLS_ROOT` for local skill folder scanning.
+- `SKILLS_ROOT` for optional local skill folder scanning. If it is not set, the app reads bundled repo skills from `skills/`.
 
 Deployment should add Coze-specific variables as needed. Exact names depend on Coze service SDK, but the project needs:
 

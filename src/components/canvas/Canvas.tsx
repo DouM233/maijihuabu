@@ -124,8 +124,12 @@ function withNodeResizer(Component: ComponentType<NodeProps>) {
           isVisible={props.selected}
           minWidth={180}
           minHeight={110}
-          lineClassName="!border-primary"
-          handleClassName="!h-3 !w-3 !border-primary !bg-card"
+          lineClassName={isCleanOutput ? '!border-transparent' : '!border-primary'}
+          handleClassName={
+            isCleanOutput
+              ? '!h-2.5 !w-2.5 !rounded-full !border-primary !bg-background/80 !shadow-sm'
+              : '!h-3 !w-3 !border-primary !bg-card'
+          }
           onResizeEnd={(_, params) => {
             updateNodeData(props.id, {
               nodeWidth: params.width,
