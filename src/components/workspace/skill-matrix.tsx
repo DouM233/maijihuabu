@@ -229,10 +229,51 @@ export function SkillMatrix({ onSelectTemplate, mode = 'full', width, treeWidth:
   const [internalTreeWidth, setInternalTreeWidth] = useState(224);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [activeTemplate, setActiveTemplate] = useState<PromptTemplate | null>(null);
+  const [remoteTemplates, setRemoteTemplates] = useState<PromptTemplate[] | null>(null);
+  const [remoteCategoryTree, setRemoteCategoryTree] = useState<CategoryNode[] | null>(null);
+  const [skillsError, setSkillsError] = useState('');
+  const [skillsReloadKey, setSkillsReloadKey] = useState(0);
   const treeWidth = externalTreeWidth ?? internalTreeWidth;
+  const templates = remoteTemplates?.length ? remoteTemplates : PROMPT_TEMPLATES;
+  const categoryTree = remoteCategoryTree?.length ? remoteCategoryTree : CATEGORY_TREE;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSkills() {
+      try {
+        const response = await fetch('/api/skills', { cache: 'no-store' });
+        const data = await response.json() as {
+          templates?: PromptTemplate[];
+          categoryTree?: CategoryNode[];
+          error?: string;
+        };
+
+        if (cancelled) return;
+
+        if (!response.ok || data.error) {
+          setSkillsError(data.error || `Skill 加载失败：HTTP ${response.status}`);
+          return;
+        }
+
+        setRemoteTemplates(data.templates ?? []);
+        setRemoteCategoryTree(data.categoryTree ?? []);
+        setSkillsError('');
+      } catch (error) {
+        if (!cancelled) {
+          setSkillsError(error instanceof Error ? error.message : 'Skill 加载失败');
+        }
+      }
+    }
+
+    void loadSkills();
+    return () => {
+      cancelled = true;
+    };
+  }, [skillsReloadKey]);
 
   const filteredTemplates = useMemo(() => {
-    let result = PROMPT_TEMPLATES;
+    let result = templates;
     if (selectedCategory) {
       const findTemplateIds = (nodes: CategoryNode[]): string[] => {
         let ids: string[] = [];
@@ -246,8 +287,9 @@ export function SkillMatrix({ onSelectTemplate, mode = 'full', width, treeWidth:
         }
         return ids;
       };
-      const ids = findTemplateIds(CATEGORY_TREE);
+      const ids = findTemplateIds(categoryTree);
       if (ids.length > 0) result = result.filter((t) => ids.includes(t.id));
+      if (ids.length === 0) result = result.filter((t) => t.category === selectedCategory || t.subCategory === selectedCategory);
     }
     if (searchValue.trim()) {
       const keyword = searchValue.trim().toLowerCase();
@@ -259,14 +301,14 @@ export function SkillMatrix({ onSelectTemplate, mode = 'full', width, treeWidth:
       );
     }
     return result;
-  }, [selectedCategory, searchValue]);
+  }, [categoryTree, selectedCategory, searchValue, templates]);
 
   /* ─── 类目搜索过滤 ─── */
   const [categorySearch, setCategorySearch] = useState('');
   const filteredCategoryTree = useMemo(() => {
-    if (!categorySearch.trim()) return CATEGORY_TREE;
+    if (!categorySearch.trim()) return categoryTree;
     const keyword = categorySearch.trim().toLowerCase();
-    return CATEGORY_TREE.map((group) => {
+    return categoryTree.map((group) => {
       const matchedChildren = group.children?.filter((child) =>
         child.label.toLowerCase().includes(keyword)
       );
@@ -278,7 +320,7 @@ export function SkillMatrix({ onSelectTemplate, mode = 'full', width, treeWidth:
       }
       return null;
     }).filter(Boolean) as CategoryNode[];
-  }, [categorySearch]);
+  }, [categorySearch, categoryTree]);
 
   /* ─── 树状导航（仅 tree-only 或 full） ─── */
   const treeContent = (
@@ -343,12 +385,36 @@ export function SkillMatrix({ onSelectTemplate, mode = 'full', width, treeWidth:
             {filteredTemplates.length} 套
           </span>
         </div>
+        <div className="flex items-center gap-2">
+          <span
+            className={cn(
+              'rounded-full px-2 py-0.5 text-[10px] font-medium',
+              remoteTemplates?.length
+                ? 'bg-emerald-500/10 text-emerald-600'
+                : 'bg-muted text-muted-foreground'
+            )}
+          >
+            {remoteTemplates?.length ? '热拔插 Skill' : '本地默认'}
+          </span>
+          {skillsError && (
+            <span className="max-w-[180px] truncate rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive" title={skillsError}>
+              {skillsError}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => setSkillsReloadKey((key) => key + 1)}
+            className="h-8 rounded-lg border border-border bg-card px-3 text-xs font-medium text-foreground/80 transition hover:bg-muted"
+          >
+            刷新 Skill
+          </button>
         <input
           value={searchValue}
           onChange={(e) => setSearchValue(e.target.value)}
           placeholder="搜索风格..."
           className="h-8 w-48 rounded-lg border border-border bg-card pl-3 pr-3 text-xs text-foreground/80 placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/30"
         />
+        </div>
       </div>
       <div className="flex-1 overflow-y-auto p-5">
         {filteredTemplates.length === 0 ? (
