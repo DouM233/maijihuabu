@@ -12,6 +12,10 @@ This document is written for the Coze Coding agent that will deploy the project 
 - 把上传素材和生成图片从 `blob:` / `data:image;base64`，替换为扣子对象存储 URL。
 - 保持现有前端 API 契约不变，让画板历史、保存、打开、生成结果节点继续可用。
 
+先在扣子数据库执行建表脚本：
+
+- `docs/coze-database-schema.sql`
+
 最重要的数据原则：
 
 - 数据库存画板结构和元数据。

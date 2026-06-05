@@ -480,6 +480,7 @@ function CanvasInner({ onAddNodeRef, selectedSkillTemplate }: CanvasInnerProps) 
     () =>
       edges.map((edge) => ({
         ...edge,
+        animated: false,
         type: edge.type || 'deletable',
         data: {
           ...edge.data,

@@ -136,6 +136,7 @@ export function SkillDetailDrawer({
                           src={src}
                           alt={`Skill 示例图 ${i + 1}`}
                           fill
+                          unoptimized
                           className="object-cover"
                           sizes="640px"
                           priority={i === 0}

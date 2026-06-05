@@ -1,7 +1,7 @@
 'use client';
 
-import { memo, useEffect, useRef, useState, type MouseEvent, type PointerEvent } from 'react';
-import { BaseEdge, EdgeLabelRenderer, type EdgeProps, getSmoothStepPath, useReactFlow } from '@xyflow/react';
+import { memo, useEffect, useRef, useState, type MouseEvent } from 'react';
+import { BaseEdge, EdgeLabelRenderer, type EdgeProps, getBezierPath, useReactFlow } from '@xyflow/react';
 import { X } from 'lucide-react';
 
 type DeletableEdgeData = {
@@ -9,11 +9,10 @@ type DeletableEdgeData = {
 };
 
 function DeletableEdge({ id, sourceX, sourceY, targetX, targetY, markerEnd, data }: EdgeProps) {
-  const { screenToFlowPosition, setEdges } = useReactFlow();
+  const { setEdges } = useReactFlow();
   const [isHovered, setIsHovered] = useState(false);
-  const [buttonPosition, setButtonPosition] = useState<{ x: number; y: number } | null>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [edgePath, labelX, labelY] = getSmoothStepPath({
+  const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,
     targetX,
@@ -43,11 +42,6 @@ function DeletableEdge({ id, sourceX, sourceY, targetX, targetY, markerEnd, data
     hideTimerRef.current = setTimeout(() => setIsHovered(false), 320);
   };
 
-  const updateButtonPosition = (event: PointerEvent<SVGPathElement>) => {
-    keepVisible();
-    setButtonPosition(screenToFlowPosition({ x: event.clientX, y: event.clientY }));
-  };
-
   const onDelete = (event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
@@ -59,38 +53,44 @@ function DeletableEdge({ id, sourceX, sourceY, targetX, targetY, markerEnd, data
     setEdges((edges) => edges.filter((edge) => edge.id !== id));
   };
 
-  const position = buttonPosition ?? { x: labelX, y: labelY };
-
   return (
     <>
-      <BaseEdge id={id} path={edgePath} markerEnd={markerEnd} style={{ stroke: '#8B6FF6', strokeWidth: 2 }} />
+      <BaseEdge
+        id={id}
+        path={edgePath}
+        markerEnd={markerEnd}
+        style={{ stroke: '#8B6FF6', strokeWidth: 2.2, strokeLinecap: 'round', opacity: 0.72 }}
+      />
       <path
         d={edgePath}
         fill="none"
         stroke="transparent"
-        strokeWidth={18}
-        onPointerEnter={updateButtonPosition}
-        onPointerMove={updateButtonPosition}
+        strokeWidth={22}
+        onPointerEnter={keepVisible}
         onPointerLeave={scheduleHide}
         style={{ pointerEvents: 'stroke' }}
       />
       <EdgeLabelRenderer>
-        <button
-          type="button"
-          aria-label="剪断连线"
-          onClick={onDelete}
-          onMouseEnter={keepVisible}
-          onMouseLeave={scheduleHide}
-          className="nodrag nopan flex h-6 w-6 items-center justify-center rounded-full border border-red-300 bg-red-500 text-white shadow-md shadow-red-500/20 transition-all hover:scale-110 hover:bg-red-600"
+        <div
+          className="nodrag nopan flex h-12 w-12 items-center justify-center"
           style={{
             position: 'absolute',
-            transform: `translate(-50%, -50%) translate(${position.x}px, ${position.y}px)`,
+            transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
             opacity: isHovered ? 1 : 0,
             pointerEvents: isHovered ? 'auto' : 'none',
           }}
+          onMouseEnter={keepVisible}
+          onMouseLeave={scheduleHide}
         >
-          <X className="w-3 h-3" />
-        </button>
+          <button
+            type="button"
+            aria-label="剪断连线"
+            onClick={onDelete}
+            className="flex h-7 w-7 items-center justify-center rounded-full border border-red-300 bg-red-500 text-white shadow-lg shadow-red-500/25 transition-transform hover:scale-110 hover:bg-red-600"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </EdgeLabelRenderer>
     </>
   );

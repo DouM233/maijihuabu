@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
+import { CATEGORY_TREE, PROMPT_TEMPLATES } from '@/lib/skillsData';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -271,7 +272,13 @@ function buildCategoryTree(templates: PromptTemplate[]): CategoryNode[] {
 export async function GET() {
   const root = process.env.SKILLS_ROOT?.trim();
   if (!root) {
-    return NextResponse.json({ templates: [], categoryTree: [], root: null, error: 'SKILLS_ROOT is not configured' });
+    return NextResponse.json({
+      templates: PROMPT_TEMPLATES,
+      categoryTree: CATEGORY_TREE,
+      root: null,
+      count: PROMPT_TEMPLATES.length,
+      warning: 'SKILLS_ROOT is not configured; using built-in fallback skills.',
+    });
   }
 
   try {
@@ -286,14 +293,14 @@ export async function GET() {
       count: templates.length,
     });
   } catch (error) {
-    return NextResponse.json(
-      {
-        templates: [],
-        categoryTree: [],
-        root,
-        error: error instanceof Error ? error.message : 'Failed to load skills',
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({
+      templates: PROMPT_TEMPLATES,
+      categoryTree: CATEGORY_TREE,
+      root,
+      count: PROMPT_TEMPLATES.length,
+      warning: error instanceof Error
+        ? `Failed to load SKILLS_ROOT; using built-in fallback skills. ${error.message}`
+        : 'Failed to load SKILLS_ROOT; using built-in fallback skills.',
+    });
   }
 }

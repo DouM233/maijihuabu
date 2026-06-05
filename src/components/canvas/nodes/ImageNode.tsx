@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useCallback } from 'react';
+import { memo, useCallback, useEffect } from 'react';
 import {
   Handle,
   Position,
@@ -26,6 +26,12 @@ const SIZE_OPTIONS = [
   { value: '1024x1024', label: '1:1' },
 ];
 
+function getOutputNodeSize(size: string) {
+  if (size === '1088x1936') return { nodeWidth: 294, nodeHeight: 520 };
+  if (size === '1024x1024') return { nodeWidth: 420, nodeHeight: 420 };
+  return { nodeWidth: 390, nodeHeight: 520 };
+}
+
 async function dataUrlToFile(dataUrl: string, fileName: string) {
   const response = await fetch(dataUrl);
   const blob = await response.blob();
@@ -42,13 +48,17 @@ function ImageNode({ id, data, selected }: NodeProps) {
   const { addEdges, addNodes, getNode, updateNodeData } = useReactFlow();
   const nodes = useNodes();
   const edges = useEdges();
-  const isRunning = nodeData.status === 'generating' || !!(nodeData as Record<string, unknown>)?.isRunning;
+  const generationStartedAt = typeof (nodeData as Record<string, unknown>)?.generationStartedAt === 'number'
+    ? ((nodeData as Record<string, unknown>).generationStartedAt as number)
+    : null;
+  const isStaleGeneration = !!generationStartedAt && Date.now() - generationStartedAt > 10 * 60 * 1000;
+  const isRunning = !isStaleGeneration && (nodeData.status === 'generating' || !!(nodeData as Record<string, unknown>)?.isRunning);
 
   const update = useCallback(
     (patch: Partial<ImageNodeData>) => {
-      updateNodeData(id, { ...nodeData, ...patch } as Record<string, unknown>);
+      updateNodeData(id, patch as Record<string, unknown>);
     },
-    [id, nodeData, updateNodeData]
+    [id, updateNodeData]
   );
 
   const prompt = typeof nodeData.prompt === 'string' ? nodeData.prompt : '';
@@ -63,6 +73,17 @@ function ImageNode({ id, data, selected }: NodeProps) {
   const height = ((nodeData as Record<string, unknown>)?.nodeHeight as number | undefined) || 520;
   const previewHeight = Math.max(120, Math.floor(height * 0.24));
   const promptHeight = Math.max(110, height - 310 - (imageUrl ? previewHeight : 0) - (error ? 44 : 0));
+
+  useEffect(() => {
+    if ((nodeData.status === 'generating' || (nodeData as Record<string, unknown>)?.isRunning) && imageUrl && (!generationStartedAt || isStaleGeneration)) {
+      updateNodeData(id, {
+        status: 'success',
+        isRunning: false,
+        error: undefined,
+        generationStartedAt: undefined,
+      });
+    }
+  }, [generationStartedAt, id, imageUrl, isStaleGeneration, nodeData, updateNodeData]);
 
   const upstreamPromptNode = nodes.find(
     (node) =>
@@ -89,6 +110,7 @@ function ImageNode({ id, data, selected }: NodeProps) {
   ].slice(0, 16);
 
   const publishResultNode = useCallback((resultImageUrl: string) => {
+    const outputSize = getOutputNodeSize(size);
     const existingOutputEdge = edges.find((edge) => {
       if (edge.source !== id) return false;
       const target = nodes.find((node) => node.id === edge.target);
@@ -104,8 +126,7 @@ function ImageNode({ id, data, selected }: NodeProps) {
         sourceImageNodeId: id,
         generatedFrom: id,
         cleanOutput: true,
-        nodeWidth: 360,
-        nodeHeight: 520,
+        ...outputSize,
       });
       return;
     }
@@ -127,8 +148,7 @@ function ImageNode({ id, data, selected }: NodeProps) {
         sourceImageNodeId: id,
         generatedFrom: id,
         cleanOutput: true,
-        nodeWidth: 360,
-        nodeHeight: 520,
+        ...outputSize,
       },
     };
     const resultEdge: Edge = {
@@ -142,7 +162,7 @@ function ImageNode({ id, data, selected }: NodeProps) {
 
     addNodes(resultNode);
     addEdges(resultEdge);
-  }, [addEdges, addNodes, edges, finalPrompt, getNode, id, nodes, updateNodeData, width]);
+  }, [addEdges, addNodes, edges, finalPrompt, getNode, id, nodes, size, updateNodeData, width]);
 
   const runGenerate = useCallback(async () => {
     if (isRunning) return;
@@ -151,7 +171,7 @@ function ImageNode({ id, data, selected }: NodeProps) {
       return;
     }
 
-    update({ status: 'generating', isRunning: true, error: undefined });
+    update({ status: 'generating', isRunning: true, error: undefined, generationStartedAt: Date.now() });
 
     try {
       let result: { imageUrl?: string; error?: string };
@@ -169,7 +189,7 @@ function ImageNode({ id, data, selected }: NodeProps) {
           method: 'POST',
           body: formData,
         });
-        result = await response.json();
+        result = await response.json().catch(() => ({ error: '图生图接口没有返回有效 JSON' }));
         if (!response.ok) throw new Error(result.error || `图生图失败：HTTP ${response.status}`);
       } else {
         const response = await fetch('/api/generate', {
@@ -181,7 +201,7 @@ function ImageNode({ id, data, selected }: NodeProps) {
             size,
           }),
         });
-        result = await response.json();
+        result = await response.json().catch(() => ({ error: '文生图接口没有返回有效 JSON' }));
         if (!response.ok) throw new Error(result.error || `文生图失败：HTTP ${response.status}`);
       }
 
@@ -193,16 +213,20 @@ function ImageNode({ id, data, selected }: NodeProps) {
         status: 'success',
         isRunning: false,
         error: undefined,
+        generationStartedAt: undefined,
       });
       publishResultNode(result.imageUrl);
     } catch (err) {
       update({
         status: 'error',
         isRunning: false,
+        generationStartedAt: undefined,
         error: err instanceof Error ? err.message : '生成失败',
       });
+    } finally {
+      updateNodeData(id, { isRunning: false, generationStartedAt: undefined });
     }
-  }, [effectiveReferenceImages, finalPrompt, isRunning, model, publishResultNode, size, update]);
+  }, [effectiveReferenceImages, finalPrompt, id, isRunning, model, publishResultNode, size, update, updateNodeData]);
 
   return (
     <div

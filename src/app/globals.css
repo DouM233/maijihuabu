@@ -263,6 +263,18 @@ body {
   box-shadow: 0 0 0 2px rgba(139, 111, 246, 0.2), 0 4px 12px rgba(139, 111, 246, 0.1) !important;
 }
 
+.xyflow__node-output {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.xyflow__node-output.selected {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
 .xyflow__handle {
   width: 10px !important;
   height: 10px !important;

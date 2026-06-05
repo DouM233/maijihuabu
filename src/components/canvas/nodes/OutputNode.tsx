@@ -35,17 +35,17 @@ function OutputNode({ data, selected }: NodeProps) {
               event.stopPropagation();
               setFullscreen(true);
             }}
-            className="h-full w-full cursor-zoom-in rounded-lg object-contain"
+            className="h-full w-full cursor-zoom-in rounded-lg object-cover"
           />
           {prompt && (
             <button
               type="button"
+              aria-label="查看生成提示词"
               onClick={(event) => {
                 event.stopPropagation();
                 setShowPrompt((value) => !value);
               }}
               className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/35 text-white opacity-70 backdrop-blur transition hover:bg-black/55 hover:opacity-100"
-              title="查看生成提示词"
             >
               <Info className="h-3.5 w-3.5" />
             </button>
@@ -65,6 +65,7 @@ function OutputNode({ data, selected }: NodeProps) {
           >
             <button
               type="button"
+              aria-label="关闭全屏"
               onClick={() => setFullscreen(false)}
               className="absolute right-5 top-5 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur transition hover:bg-white/20"
             >
@@ -73,12 +74,12 @@ function OutputNode({ data, selected }: NodeProps) {
             {prompt && (
               <button
                 type="button"
+                aria-label="查看生成提示词"
                 onClick={(event) => {
                   event.stopPropagation();
                   setShowPrompt((value) => !value);
                 }}
                 className="absolute right-20 top-5 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur transition hover:bg-white/20"
-                title="查看生成提示词"
               >
                 <Info className="h-5 w-5" />
               </button>
