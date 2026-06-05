@@ -103,6 +103,7 @@ function ImageNode({ id, data, selected }: NodeProps) {
         prompt: finalPrompt,
         sourceImageNodeId: id,
         generatedFrom: id,
+        cleanOutput: true,
         nodeWidth: 360,
         nodeHeight: 520,
       });
@@ -125,6 +126,7 @@ function ImageNode({ id, data, selected }: NodeProps) {
         prompt: finalPrompt,
         sourceImageNodeId: id,
         generatedFrom: id,
+        cleanOutput: true,
         nodeWidth: 360,
         nodeHeight: 520,
       },

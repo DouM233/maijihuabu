@@ -9,6 +9,8 @@ interface LLMNodeData {
   prompt?: string;
   systemPrompt?: string;
   model?: string;
+  skillTemplateName?: string;
+  skillTemplateTitles?: string[];
   nodeWidth?: number;
   nodeHeight?: number;
   response?: string;
@@ -30,10 +32,13 @@ function LLMNode(props: NodeProps) {
   const title = nodeData.label || 'LLM';
   const response = nodeData.response;
   const error = nodeData.error;
+  const skillTemplateName = nodeData.skillTemplateName;
+  const skillTemplateTitles = nodeData.skillTemplateTitles || [];
   const width = nodeData.nodeWidth || 280;
   const height = nodeData.nodeHeight || 420;
   const isGenerating = status === 'generating';
-  const fieldHeight = Math.max(72, Math.floor((height - 280 - (response ? 80 : 0) - (error ? 32 : 0)) / 2));
+  const skillSummaryHeight = skillTemplateName ? Math.min(132, 52 + skillTemplateTitles.slice(0, 6).length * 20) : 0;
+  const fieldHeight = Math.max(72, Math.floor((height - 280 - skillSummaryHeight - (response ? 80 : 0) - (error ? 32 : 0)) / 2));
   const { updateNodeData } = useReactFlow();
   const edges = useEdges();
 
@@ -166,6 +171,27 @@ function LLMNode(props: NodeProps) {
 
       {/* Content */}
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3 pb-4">
+        {skillTemplateName && (
+          <div className="rounded-lg border border-primary/20 bg-primary/5 p-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[11px] font-semibold text-primary">当前 Skill</span>
+              <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
+                {skillTemplateTitles.length || 1} 个模板
+              </span>
+            </div>
+            <div className="mt-1 text-sm font-semibold text-foreground">{skillTemplateName}</div>
+            {skillTemplateTitles.length > 0 && (
+              <div className="mt-2 max-h-24 space-y-1 overflow-y-auto pr-1">
+                {skillTemplateTitles.map((templateName, index) => (
+                  <div key={`${templateName}-${index}`} className="flex items-start gap-1.5 text-[11px] leading-snug text-muted-foreground">
+                    <span className="mt-[1px] shrink-0 rounded bg-muted px-1 text-[10px] text-muted-foreground">{index + 1}</span>
+                    <span>{templateName}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         <div className="space-y-1">
           <label className="text-[11px] font-medium text-muted-foreground">Skill 规则</label>
           <textarea

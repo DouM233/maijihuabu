@@ -104,6 +104,7 @@ function withNodeResizer(Component: ComponentType<NodeProps>) {
     const nodeData = props.data as Record<string, unknown>;
     const width = typeof nodeData.nodeWidth === 'number' ? nodeData.nodeWidth : undefined;
     const height = typeof nodeData.nodeHeight === 'number' ? nodeData.nodeHeight : undefined;
+    const isCleanOutput = props.type === 'output' && nodeData.cleanOutput === true;
 
     useEffect(() => {
       const interactiveElements = containerRef.current?.querySelectorAll(INTERACTIVE_NODE_SELECTOR);
@@ -129,7 +130,11 @@ function withNodeResizer(Component: ComponentType<NodeProps>) {
         />
         <div
           ref={containerRef}
-          className="h-full w-full overflow-hidden rounded-xl border border-border bg-card shadow-sm [&_*]:box-border [&>div]:!h-full [&>div]:!max-w-full [&>div]:!w-full [&_input]:max-w-full [&_select]:max-w-full [&_textarea]:max-w-full"
+          className={
+            isCleanOutput
+              ? 'h-full w-full overflow-visible bg-transparent [&_*]:box-border [&>div]:!h-full [&>div]:!max-w-full [&>div]:!w-full [&_input]:max-w-full [&_select]:max-w-full [&_textarea]:max-w-full'
+              : 'h-full w-full overflow-hidden rounded-xl border border-border bg-card shadow-sm [&_*]:box-border [&>div]:!h-full [&>div]:!max-w-full [&>div]:!w-full [&_input]:max-w-full [&_select]:max-w-full [&_textarea]:max-w-full'
+          }
           onDoubleClickCapture={(event) => {
             if (isInteractiveNodeTarget(event.target)) {
               event.stopPropagation();
@@ -248,6 +253,11 @@ function buildSkillLLMUserPrompt(selection: SelectedSkillTemplate, requirementTe
 ${requirementText}`;
 }
 
+function extractSkillTemplateTitles(template: PromptTemplate) {
+  const matches = [...template.prompt.matchAll(/^## 内部模板\s*(\d+)?[：:]\s*(.+)$/gm)];
+  return matches.map((match) => match[2].trim()).filter(Boolean);
+}
+
 function CanvasInner({ onAddNodeRef, selectedSkillTemplate }: CanvasInnerProps) {
   const { fitView, screenToFlowPosition, setViewport, zoomIn, zoomOut } = useReactFlow();
   const [nodes, setNodes] = useState<Node[]>([]);
@@ -286,6 +296,7 @@ function CanvasInner({ onAddNodeRef, selectedSkillTemplate }: CanvasInnerProps) 
 
     const { template, requestId } = selectedSkillTemplate;
     const requirementText = buildSkillRequirementText(selectedSkillTemplate);
+    const skillTemplateTitles = extractSkillTemplateTitles(template);
     const requirementId = `skill_requirement_${requestId}`;
     const llmId = `skill_llm_${requestId}`;
     const imageId = `skill_image_${requestId}`;
@@ -320,6 +331,7 @@ function CanvasInner({ onAddNodeRef, selectedSkillTemplate }: CanvasInnerProps) 
           status: 'idle',
           skillTemplateId: template.id,
           skillTemplateName: template.styleName,
+          skillTemplateTitles,
         },
       },
       {
