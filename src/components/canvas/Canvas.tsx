@@ -130,16 +130,6 @@ function withNodeResizer(Component: ComponentType<NodeProps>) {
         <div
           ref={containerRef}
           className="h-full w-full overflow-hidden rounded-xl border border-border bg-card shadow-sm [&_*]:box-border [&>div]:!h-full [&>div]:!max-w-full [&>div]:!w-full [&_input]:max-w-full [&_select]:max-w-full [&_textarea]:max-w-full"
-          onPointerDownCapture={(event) => {
-            if (isInteractiveNodeTarget(event.target)) {
-              event.stopPropagation();
-            }
-          }}
-          onMouseDownCapture={(event) => {
-            if (isInteractiveNodeTarget(event.target)) {
-              event.stopPropagation();
-            }
-          }}
           onDoubleClickCapture={(event) => {
             if (isInteractiveNodeTarget(event.target)) {
               event.stopPropagation();
