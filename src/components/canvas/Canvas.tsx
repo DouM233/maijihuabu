@@ -77,12 +77,40 @@ function isInteractiveNodeTarget(target: EventTarget | null) {
   return target instanceof HTMLElement && !!target.closest(INTERACTIVE_NODE_SELECTOR);
 }
 
+function cloneNodeForHistory(node: Node): Node {
+  return {
+    ...node,
+    data: { ...node.data },
+    position: { ...node.position },
+  };
+}
+
+function cloneEdgeForHistory(edge: Edge): Edge {
+  return {
+    ...edge,
+    data: edge.data ? { ...edge.data } : edge.data,
+  };
+}
+
+interface CanvasSnapshot {
+  nodes: Node[];
+  edges: Edge[];
+}
+
 function withNodeResizer(Component: ComponentType<NodeProps>) {
   function ResizableCanvasNode(props: NodeProps) {
     const { updateNodeData } = useReactFlow();
+    const containerRef = useRef<HTMLDivElement>(null);
     const nodeData = props.data as Record<string, unknown>;
     const width = typeof nodeData.nodeWidth === 'number' ? nodeData.nodeWidth : undefined;
     const height = typeof nodeData.nodeHeight === 'number' ? nodeData.nodeHeight : undefined;
+
+    useEffect(() => {
+      const interactiveElements = containerRef.current?.querySelectorAll(INTERACTIVE_NODE_SELECTOR);
+      interactiveElements?.forEach((element) => {
+        element.classList.add('nodrag', 'nowheel');
+      });
+    });
 
     return (
       <>
@@ -100,8 +128,14 @@ function withNodeResizer(Component: ComponentType<NodeProps>) {
           }}
         />
         <div
+          ref={containerRef}
           className="h-full w-full overflow-hidden rounded-xl border border-border bg-card shadow-sm [&_*]:box-border [&>div]:!h-full [&>div]:!max-w-full [&>div]:!w-full [&_input]:max-w-full [&_select]:max-w-full [&_textarea]:max-w-full"
           onPointerDownCapture={(event) => {
+            if (isInteractiveNodeTarget(event.target)) {
+              event.stopPropagation();
+            }
+          }}
+          onMouseDownCapture={(event) => {
             if (isInteractiveNodeTarget(event.target)) {
               event.stopPropagation();
             }
@@ -233,7 +267,28 @@ function CanvasInner({ onAddNodeRef, selectedSkillTemplate }: CanvasInnerProps) 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 
   const nodesRef = useRef<Node[]>([]);
+  const edgesRef = useRef<Edge[]>([]);
+  const undoStackRef = useRef<CanvasSnapshot[]>([]);
   useEffect(() => { nodesRef.current = nodes; }, [nodes]);
+  useEffect(() => { edgesRef.current = edges; }, [edges]);
+
+  const pushHistory = useCallback(() => {
+    undoStackRef.current.push({
+      nodes: nodesRef.current.map(cloneNodeForHistory),
+      edges: edgesRef.current.map(cloneEdgeForHistory),
+    });
+    if (undoStackRef.current.length > 80) {
+      undoStackRef.current.shift();
+    }
+  }, []);
+
+  const undoCanvas = useCallback(() => {
+    const snapshot = undoStackRef.current.pop();
+    if (!snapshot) return;
+    setNodes(snapshot.nodes.map(cloneNodeForHistory));
+    setEdges(snapshot.edges.map(cloneEdgeForHistory));
+    setSelectedIds([]);
+  }, []);
 
   // 当 Skill 模板被应用时，创建“需求 -> LLM补全 -> 生图”的工作流。
   useEffect(() => {
@@ -245,6 +300,7 @@ function CanvasInner({ onAddNodeRef, selectedSkillTemplate }: CanvasInnerProps) 
     const llmId = `skill_llm_${requestId}`;
     const imageId = `skill_image_${requestId}`;
 
+    pushHistory();
     setNodes((nds) => [
       ...nds,
       {
@@ -311,20 +367,27 @@ function CanvasInner({ onAddNodeRef, selectedSkillTemplate }: CanvasInnerProps) 
         animated: true,
       },
     ]);
-  }, [selectedSkillTemplate]);
+  }, [pushHistory, selectedSkillTemplate]);
 
   // 节点变化
   const onNodesChange = useCallback((changes: NodeChange[]) => {
+    if (changes.some((change) => change.type === 'remove')) {
+      pushHistory();
+    }
     setNodes((nds) => applyNodeChanges(changes, nds));
-  }, []);
+  }, [pushHistory]);
 
   const onEdgesChange = useCallback((changes: EdgeChange[]) => {
+    if (changes.some((change) => change.type === 'remove')) {
+      pushHistory();
+    }
     setEdges((eds) => applyEdgeChanges(changes, eds));
-  }, []);
+  }, [pushHistory]);
 
   const onConnect = useCallback((connection: Connection) => {
+    pushHistory();
     setEdges((eds) => addEdge({ ...connection, animated: true }, eds));
-  }, []);
+  }, [pushHistory]);
 
   const isValidConnection = useCallback((connection: Connection) => {
     const source = nodesRef.current.find((n) => n.id === connection.source);
@@ -334,6 +397,7 @@ function CanvasInner({ onAddNodeRef, selectedSkillTemplate }: CanvasInnerProps) 
 
   // 添加节点
   const addNode = useCallback((type: string, position?: { x: number; y: number }) => {
+    pushHistory();
     const id = `${type}_${Date.now()}`;
     const pos = position || { x: Math.random() * 300 + 50, y: Math.random() * 200 + 50 };
     const newNode: Node = {
@@ -343,7 +407,7 @@ function CanvasInner({ onAddNodeRef, selectedSkillTemplate }: CanvasInnerProps) 
       data: { label: type, status: 'idle' },
     };
     setNodes((nds) => [...nds, newNode]);
-  }, []);
+  }, [pushHistory]);
 
   useEffect(() => {
     if (onAddNodeRef) onAddNodeRef.current = addNode;
@@ -363,15 +427,18 @@ function CanvasInner({ onAddNodeRef, selectedSkillTemplate }: CanvasInnerProps) 
 
   // 删除选中
   const deleteSelected = useCallback(() => {
+    if (selectedIds.length === 0) return;
+    pushHistory();
     setNodes((nds) => nds.filter((n) => !selectedIds.includes(n.id)));
     setEdges((eds) => eds.filter((e) => !selectedIds.includes(e.source) && !selectedIds.includes(e.target)));
     setSelectedIds([]);
-  }, [selectedIds]);
+  }, [pushHistory, selectedIds]);
 
   // 复制选中
   const duplicateSelected = useCallback(() => {
     const toCopy = nodes.filter((n) => selectedIds.includes(n.id));
     if (toCopy.length === 0) return;
+    pushHistory();
     const newNodes = toCopy.map((n) => ({
       ...n,
       id: `${n.type}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -380,7 +447,7 @@ function CanvasInner({ onAddNodeRef, selectedSkillTemplate }: CanvasInnerProps) 
     }));
     setNodes((nds) => [...nds, ...newNodes]);
     setSelectedIds(newNodes.map((n) => n.id));
-  }, [nodes, selectedIds]);
+  }, [nodes, pushHistory, selectedIds]);
 
   const showContextMenu = useCallback((e: React.MouseEvent | MouseEvent) => {
     e.preventDefault();
@@ -408,7 +475,15 @@ function CanvasInner({ onAddNodeRef, selectedSkillTemplate }: CanvasInnerProps) 
   // 快捷键
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      const fromInteractiveInput = isInteractiveNodeTarget(e.target);
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !fromInteractiveInput) {
+        e.preventDefault();
+        undoCanvas();
+        return;
+      }
+      if (fromInteractiveInput) return;
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedIds.length > 0) {
+        e.preventDefault();
         deleteSelected();
       }
       if (e.key === 'd' && (e.ctrlKey || e.metaKey) && selectedIds.length > 0) {
@@ -418,7 +493,7 @@ function CanvasInner({ onAddNodeRef, selectedSkillTemplate }: CanvasInnerProps) 
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [selectedIds, deleteSelected, duplicateSelected]);
+  }, [selectedIds, deleteSelected, duplicateSelected, undoCanvas]);
 
   // 文件拖拽上传
   const onDragOver = useCallback((e: React.DragEvent) => {
@@ -438,6 +513,7 @@ function CanvasInner({ onAddNodeRef, selectedSkillTemplate }: CanvasInnerProps) 
         e.stopPropagation();
         const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
         const id = `${nodeType}_${Date.now()}`;
+        pushHistory();
         setNodes((nds) => [
           ...nds,
           {
@@ -453,6 +529,7 @@ function CanvasInner({ onAddNodeRef, selectedSkillTemplate }: CanvasInnerProps) 
       // 处理文件拖拽上传
       const files = e.dataTransfer.files;
       if (files.length === 0) return;
+      pushHistory();
       const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
@@ -476,7 +553,7 @@ function CanvasInner({ onAddNodeRef, selectedSkillTemplate }: CanvasInnerProps) 
         ]);
       }
     },
-    [screenToFlowPosition]
+    [pushHistory, screenToFlowPosition]
   );
 
   return (

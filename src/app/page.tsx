@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { SidebarNav, type TabId } from '@/components/workspace/sidebar-nav';
+import { useCallback, useState } from 'react';
 import Canvas from '@/components/canvas/Canvas';
-import { SkillMatrix } from '@/components/workspace/skill-matrix';
 import { AssetWall } from '@/components/workspace/asset-wall';
+import { SidebarNav, type TabId } from '@/components/workspace/sidebar-nav';
+import { SkillMatrix } from '@/components/workspace/skill-matrix';
 import type { PromptTemplate } from '@/lib/skillsData';
 import { useAppStore } from '@/lib/store';
 
@@ -52,28 +52,24 @@ export default function HomePage() {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-background">
-      {/* 窄侧边栏 */}
       <SidebarNav activeTab={activeTab} onTabChange={handleTabChange} />
 
-      {/* 主内容区 —— 点击导航后全屏覆盖 */}
       <main className="min-w-0 flex-1 overflow-hidden">
-        {activeTab === 'creative' && (
-          <div className="h-full">
-            <Canvas selectedSkillTemplate={selectedTemplate} />
-          </div>
-        )}
+        <div className={activeTab === 'creative' ? 'h-full' : 'hidden h-full'}>
+          <Canvas selectedSkillTemplate={selectedTemplate} />
+        </div>
 
-        {activeTab === 'skills' && (
+        <div className={activeTab === 'skills' ? 'h-full' : 'hidden h-full'}>
           <SkillMatrix onSelectTemplate={handleSelectTemplate} mode="full" />
-        )}
+        </div>
 
-        {activeTab === 'history' && (
+        <div className={activeTab === 'history' ? 'h-full' : 'hidden h-full'}>
           <AssetWall title="历史记录" defaultFilter="recent" />
-        )}
+        </div>
 
-        {activeTab === 'gallery' && (
+        <div className={activeTab === 'gallery' ? 'h-full' : 'hidden h-full'}>
           <AssetWall title="画廊" defaultFilter="all" />
-        )}
+        </div>
       </main>
     </div>
   );
