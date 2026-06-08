@@ -715,6 +715,17 @@ function CanvasInner({ onAddNodeRef, selectedSkillTemplate }: CanvasInnerProps) 
     }
   }, [activeCanvasId, canvasName, createCanvas, getViewport, saveCanvas]);
 
+  useEffect(() => {
+    if (isLoadingCanvas || isSavingCanvas) return;
+    if (nodes.length === 0 && edges.length === 0) return;
+
+    const timeoutId = window.setTimeout(() => {
+      void handleSaveCanvas();
+    }, 1800);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [edges, handleSaveCanvas, isLoadingCanvas, isSavingCanvas, nodes]);
+
   const savedStatus = isLoadingCanvas
     ? '加载中'
     : lastSavedAt
