@@ -32,8 +32,10 @@ Data layout:
 D:\maiji-data\
   app.sqlite
   assets\
-    uploads\
-    generated\
+    users\
+      user-id\
+        uploads\
+        generated\
 ```
 
 ## Environment
@@ -89,14 +91,16 @@ http://192.168.1.88:5000
 Implemented:
 
 - Canvas CRUD uses SQLite through `src/lib/canvas/persistence.ts`.
+- Canvas lists are isolated by browser-local user identity.
 - Browser uploads use `POST /api/assets/upload`.
 - Local files are served through `GET /api/assets/file/...`.
 - Text-to-image and image-edit results are saved to local disk before returning to the canvas.
 - The app can be reached from LAN because `src/server.ts` defaults to `0.0.0.0`.
+- Uploaded and generated files are grouped by user under `assets/users/<user-id>/`.
 
 Not implemented yet:
 
-- Login and employee permission control.
+- Strong login and employee permission control.
 - Admin UI for disabling users.
 - Automatic backups.
 - Windows installer / `.exe` packaging.
@@ -107,6 +111,8 @@ Not implemented yet:
 - Back up `MAIJI_DATA_DIR`, not just the Git repository.
 - `app.sqlite` stores canvas metadata and asset records.
 - `assets/` stores the actual uploaded and generated files.
+- The host maintainer can see all users' files on disk.
+- Browser users only see their own canvas list in the UI.
+- Current user identity is stored in each browser's localStorage, so this is workspace isolation, not a security boundary.
 - If a file URL starts with `/api/assets/file/`, it is a host-local permanent file URL.
 - Avoid storing `blob:` URLs or large base64 strings in saved canvases.
-

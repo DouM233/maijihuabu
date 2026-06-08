@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { getLocalUserHeaders } from '@/lib/client/localUser';
 import type { CanvasListItem, CanvasData } from './types';
 
 interface CanvasStoreState {
@@ -17,7 +18,12 @@ interface CanvasStoreState {
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...init });
+  const headers = {
+    'Content-Type': 'application/json',
+    ...getLocalUserHeaders(),
+    ...(init?.headers || {}),
+  };
+  const res = await fetch(url, { ...init, headers });
   if (!res.ok) {
     let errMsg = `HTTP ${res.status}`;
     try { const data = await res.json(); errMsg = (data as { error?: string }).error || errMsg; } catch { /* ignore */ }

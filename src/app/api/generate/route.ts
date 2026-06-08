@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { saveLocalAsset } from '@/lib/local-data/assets';
+import { getUserContextFromRequest } from '@/lib/local-data/users';
 
 const API_URL = process.env.CHAT_API_URL || 'https://yunwu.ai/v1/chat/completions';
 const IMAGE_API_URL = API_URL.replace('/chat/completions', '/images/generations');
@@ -9,6 +10,7 @@ export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
   try {
+    const user = getUserContextFromRequest(request);
     const body = await request.json();
     const { prompt, size, quality, model } = body;
 
@@ -81,6 +83,7 @@ export async function POST(request: NextRequest) {
       originalName: `generated-${Date.now()}.png`,
       kind: 'generated/images',
       mimeType: 'image/png',
+      owner: user,
       model: apiModel,
       prompt,
     });

@@ -13,6 +13,7 @@ import {
 } from '@xyflow/react';
 import { Image as ImageIcon, Loader2, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getLocalUserHeaders } from '@/lib/client/localUser';
 import type { ImageNodeData } from '@/lib/canvas/types';
 
 const MODEL_OPTIONS = [
@@ -45,7 +46,14 @@ async function fetchGenerationResult(url: string, init: RequestInit, fallbackErr
   const timeoutId = setTimeout(() => controller.abort(), GENERATE_TIMEOUT_MS);
 
   try {
-    const response = await fetch(url, { ...init, signal: controller.signal });
+    const response = await fetch(url, {
+      ...init,
+      headers: {
+        ...getLocalUserHeaders(),
+        ...(init.headers || {}),
+      },
+      signal: controller.signal,
+    });
     const result = await response.json().catch(() => ({ error: fallbackError }));
     return { response, result: result as { imageUrl?: string; error?: string } };
   } catch (error) {

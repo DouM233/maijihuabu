@@ -3,9 +3,12 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { getDatabase } from './database';
 import { getLocalAssetsDir } from './config';
+import type { UserContext } from './users';
 
 export interface LocalAssetRecord {
   id: string;
+  ownerId: string;
+  ownerName: string;
   canvasId?: string | null;
   originalName: string;
   kind: string;
@@ -24,6 +27,7 @@ interface SaveLocalAssetInput {
   kind: string;
   mimeType: string;
   canvasId?: string | null;
+  owner?: UserContext;
   model?: string | null;
   prompt?: string | null;
 }
@@ -45,6 +49,14 @@ export function sanitizeFileName(fileName: string) {
     .replace(/^_+|_+$/g, '')
     .slice(0, 80) || 'asset';
   return `${safeName}${parsed.ext.toLowerCase()}`;
+}
+
+function sanitizePathSegment(value: string) {
+  return value
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80) || 'shared';
 }
 
 export function getAssetAbsolutePath(relativePath: string) {
@@ -89,11 +101,13 @@ export async function saveLocalAsset(input: SaveLocalAssetInput): Promise<LocalA
   const day = String(date.getDate()).padStart(2, '0');
   const id = randomUUID();
   const fallbackExt = MIME_EXTENSION[input.mimeType] || '.bin';
+  const owner = input.owner || { id: 'shared', name: 'Shared' };
+  const ownerSegment = sanitizePathSegment(owner.id);
   const safeOriginalName = sanitizeFileName(input.originalName || `asset${fallbackExt}`);
   const ext = path.extname(safeOriginalName) || fallbackExt;
   const baseName = path.basename(safeOriginalName, path.extname(safeOriginalName));
   const fileName = `${baseName}_${id.slice(0, 8)}${ext}`;
-  const relativePath = path.posix.join(input.kind, year, month, day, fileName);
+  const relativePath = path.posix.join('users', ownerSegment, input.kind, year, month, day, fileName);
   const absolutePath = getAssetAbsolutePath(relativePath);
 
   await mkdir(path.dirname(absolutePath), { recursive: true });
@@ -102,6 +116,8 @@ export async function saveLocalAsset(input: SaveLocalAssetInput): Promise<LocalA
   const url = `/api/assets/file/${relativePath}`;
   const record: LocalAssetRecord = {
     id,
+    ownerId: owner.id,
+    ownerName: owner.name,
     canvasId: input.canvasId || null,
     originalName: safeOriginalName,
     kind: input.kind,
@@ -116,9 +132,9 @@ export async function saveLocalAsset(input: SaveLocalAssetInput): Promise<LocalA
 
   getDatabase().prepare(`
     insert into assets (
-      id, canvas_id, original_name, kind, relative_path, url, mime_type, size, model, prompt, created_at
+      id, owner_id, owner_name, canvas_id, original_name, kind, relative_path, url, mime_type, size, model, prompt, created_at
     ) values (
-      @id, @canvasId, @originalName, @kind, @relativePath, @url, @mimeType, @size, @model, @prompt, @createdAt
+      @id, @ownerId, @ownerName, @canvasId, @originalName, @kind, @relativePath, @url, @mimeType, @size, @model, @prompt, @createdAt
     )
   `).run(record);
 

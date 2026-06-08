@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { renameCanvas, toListItem } from '@/lib/canvas/persistence';
+import { getUserContextFromRequest } from '@/lib/local-data/users';
 
 type CanvasRouteContext = {
   params: Promise<{ id: string }>;
@@ -7,13 +8,14 @@ type CanvasRouteContext = {
 
 export async function PATCH(request: NextRequest, context: CanvasRouteContext) {
   const { id } = await context.params;
+  const user = getUserContextFromRequest(request);
   const body = await request.json().catch(() => ({}));
   const name = typeof body.name === 'string' ? body.name : '';
   if (!name.trim()) {
     return NextResponse.json({ error: 'Canvas name is required' }, { status: 400 });
   }
 
-  const canvas = await renameCanvas(id, name);
+  const canvas = await renameCanvas(id, name, user.id);
   if (!canvas) {
     return NextResponse.json({ error: 'Canvas not found' }, { status: 404 });
   }

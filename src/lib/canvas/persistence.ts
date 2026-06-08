@@ -1,9 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { getDatabase } from '@/lib/local-data/database';
+import type { UserContext } from '@/lib/local-data/users';
 import type { CanvasData, CanvasListItem } from './types';
 
 interface CanvasRow {
   id: string;
+  owner_id: string;
+  owner_name: string;
   name: string;
   nodes_json: string;
   edges_json: string;
@@ -58,15 +61,15 @@ function toListItem(canvas: CanvasData): CanvasListItem {
   };
 }
 
-export async function listCanvases() {
+export async function listCanvases(ownerId = 'shared') {
   const rows = getDatabase()
-    .prepare('select id, name, nodes_json, created_at, updated_at from canvases order by updated_at desc')
-    .all() as Array<Pick<CanvasRow, 'id' | 'name' | 'nodes_json' | 'created_at' | 'updated_at'>>;
+    .prepare('select id, name, nodes_json, created_at, updated_at from canvases where owner_id = ? order by updated_at desc')
+    .all(ownerId) as Array<Pick<CanvasRow, 'id' | 'name' | 'nodes_json' | 'created_at' | 'updated_at'>>;
 
   return rows.map(toListItemFromRow);
 }
 
-export async function createCanvas(name = 'Untitled canvas') {
+export async function createCanvas(name = 'Untitled canvas', owner: UserContext = { id: 'shared', name: 'Shared' }) {
   const timestamp = now();
   const canvas: CanvasData = {
     id: randomUUID(),
@@ -79,10 +82,12 @@ export async function createCanvas(name = 'Untitled canvas') {
   };
 
   getDatabase().prepare(`
-    insert into canvases (id, name, nodes_json, edges_json, viewport_json, created_at, updated_at)
-    values (@id, @name, @nodesJson, @edgesJson, @viewportJson, @createdAt, @updatedAt)
+    insert into canvases (id, owner_id, owner_name, name, nodes_json, edges_json, viewport_json, created_at, updated_at)
+    values (@id, @ownerId, @ownerName, @name, @nodesJson, @edgesJson, @viewportJson, @createdAt, @updatedAt)
   `).run({
     id: canvas.id,
+    ownerId: owner.id,
+    ownerName: owner.name,
     name: canvas.name,
     nodesJson: JSON.stringify(canvas.nodes),
     edgesJson: JSON.stringify(canvas.edges),
@@ -94,16 +99,16 @@ export async function createCanvas(name = 'Untitled canvas') {
   return canvas;
 }
 
-export async function getCanvas(id: string) {
+export async function getCanvas(id: string, ownerId = 'shared') {
   const row = getDatabase()
-    .prepare('select * from canvases where id = ?')
-    .get(id) as CanvasRow | undefined;
+    .prepare('select * from canvases where id = ? and owner_id = ?')
+    .get(id, ownerId) as CanvasRow | undefined;
 
   return row ? rowToCanvas(row) : null;
 }
 
-export async function saveCanvas(id: string, data: Partial<CanvasData>) {
-  const existing = await getCanvas(id);
+export async function saveCanvas(id: string, data: Partial<CanvasData>, ownerId = 'shared') {
+  const existing = await getCanvas(id, ownerId);
   if (!existing) return null;
 
   const updated: CanvasData = {
@@ -122,9 +127,10 @@ export async function saveCanvas(id: string, data: Partial<CanvasData>) {
         edges_json = @edgesJson,
         viewport_json = @viewportJson,
         updated_at = @updatedAt
-    where id = @id
+    where id = @id and owner_id = @ownerId
   `).run({
     id,
+    ownerId,
     name: updated.name,
     nodesJson: JSON.stringify(updated.nodes),
     edgesJson: JSON.stringify(updated.edges),
@@ -135,14 +141,13 @@ export async function saveCanvas(id: string, data: Partial<CanvasData>) {
   return updated;
 }
 
-export async function renameCanvas(id: string, name: string) {
-  return saveCanvas(id, { name });
+export async function renameCanvas(id: string, name: string, ownerId = 'shared') {
+  return saveCanvas(id, { name }, ownerId);
 }
 
-export async function deleteCanvas(id: string) {
-  const result = getDatabase().prepare('delete from canvases where id = ?').run(id);
+export async function deleteCanvas(id: string, ownerId = 'shared') {
+  const result = getDatabase().prepare('delete from canvases where id = ? and owner_id = ?').run(id, ownerId);
   return result.changes > 0;
 }
 
 export { toListItem };
-

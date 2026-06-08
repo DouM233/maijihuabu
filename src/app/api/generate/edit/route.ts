@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { saveLocalAsset } from '@/lib/local-data/assets';
+import { getUserContextFromRequest } from '@/lib/local-data/users';
 
 const API_URL = process.env.CHAT_API_URL || 'https://yunwu.ai/v1/chat/completions';
 const EDIT_API_URL = API_URL.replace('/chat/completions', '/images/edits');
@@ -9,6 +10,7 @@ export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
   try {
+    const user = getUserContextFromRequest(request);
     const formData = await request.formData();
     const prompt = formData.get('prompt') as string;
     const imageFiles = formData
@@ -104,6 +106,7 @@ export async function POST(request: NextRequest) {
       originalName: `generated-edit-${Date.now()}.png`,
       kind: 'generated/images',
       mimeType,
+      owner: user,
       model,
       prompt,
     });
@@ -120,4 +123,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: `image edit request failed: ${message}` }, { status: 500 });
   }
 }
-

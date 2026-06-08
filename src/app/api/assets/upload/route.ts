@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { saveLocalAsset } from '@/lib/local-data/assets';
+import { getUserContextFromRequest } from '@/lib/local-data/users';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -20,6 +21,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'file is required' }, { status: 400 });
     }
 
+    const user = getUserContextFromRequest(request);
     const buffer = Buffer.from(await file.arrayBuffer());
     const asset = await saveLocalAsset({
       buffer,
@@ -27,6 +29,7 @@ export async function POST(request: NextRequest) {
       kind: inferUploadKind(file),
       mimeType: file.type || 'application/octet-stream',
       canvasId: formData.get('canvasId') as string | null,
+      owner: user,
     });
 
     return NextResponse.json({ data: asset });
@@ -36,4 +39,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-

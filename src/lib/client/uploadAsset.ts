@@ -1,3 +1,5 @@
+import { getLocalUserHeaders } from './localUser';
+
 interface UploadAssetResponse {
   data?: {
     url: string;
@@ -16,6 +18,7 @@ export async function uploadAssetFile(file: File, canvasId?: string | null) {
 
   const response = await fetch('/api/assets/upload', {
     method: 'POST',
+    headers: getLocalUserHeaders(),
     body: formData,
   });
 
@@ -26,4 +29,3 @@ export async function uploadAssetFile(file: File, canvasId?: string | null) {
 
   return result.data;
 }
-
