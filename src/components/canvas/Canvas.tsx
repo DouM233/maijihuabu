@@ -28,6 +28,7 @@ import '@xyflow/react/dist/style.css';
 import { isConnectionValid } from '@/lib/canvas/portTypes';
 import { NODE_REGISTRY } from '@/lib/canvas/nodeRegistry';
 import { useCanvasStore } from '@/lib/canvas/store';
+import { uploadAssetFile } from '@/lib/client/uploadAsset';
 import type { CanvasData } from '@/lib/canvas/types';
 import type { PromptTemplate } from '@/lib/skillsData';
 import CanvasSidebar from './CanvasSidebar';
@@ -608,7 +609,7 @@ function CanvasInner({ onAddNodeRef, selectedSkillTemplate }: CanvasInnerProps) 
   }, []);
 
   const onDrop = useCallback(
-    (e: React.DragEvent) => {
+    async (e: React.DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
 
@@ -639,7 +640,8 @@ function CanvasInner({ onAddNodeRef, selectedSkillTemplate }: CanvasInnerProps) 
       const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        const url = URL.createObjectURL(file);
+        const asset = await uploadAssetFile(file, activeCanvasId);
+        const url = asset.url;
         const id = `upload_${Date.now()}_${i}`;
         const uploadType = file.type.startsWith('image/')
           ? 'image'
@@ -654,12 +656,12 @@ function CanvasInner({ onAddNodeRef, selectedSkillTemplate }: CanvasInnerProps) 
             id,
             type: 'upload',
             position: { x: pos.x + i * 20, y: pos.y + i * 20 },
-            data: { label: file.name, imageUrl: uploadType === 'image' ? url : undefined, videoUrl: uploadType === 'video' ? url : undefined, audioUrl: uploadType === 'audio' ? url : undefined, uploadType },
+            data: { label: asset.originalName || file.name, imageUrl: uploadType === 'image' ? url : undefined, videoUrl: uploadType === 'video' ? url : undefined, audioUrl: uploadType === 'audio' ? url : undefined, uploadType },
           },
         ]);
       }
     },
-    [pushHistory, screenToFlowPosition]
+    [activeCanvasId, pushHistory, screenToFlowPosition]
   );
 
   const handleNewCanvas = useCallback(async () => {

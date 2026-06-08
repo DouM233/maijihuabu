@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { saveLocalAsset } from '@/lib/local-data/assets';
 
 const API_URL = process.env.CHAT_API_URL || 'https://yunwu.ai/v1/chat/completions';
 const IMAGE_API_URL = API_URL.replace('/chat/completions', '/images/generations');
 const API_KEY = process.env.CHAT_API_KEY || '';
+
+export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
   try {
@@ -72,10 +75,19 @@ export async function POST(request: NextRequest) {
     }
 
     const b64Data = result.data[0].b64_json;
-    const imageDataUrl = `data:image/png;base64,${b64Data}`;
+    const imageBuffer = Buffer.from(b64Data, 'base64');
+    const asset = await saveLocalAsset({
+      buffer: imageBuffer,
+      originalName: `generated-${Date.now()}.png`,
+      kind: 'generated/images',
+      mimeType: 'image/png',
+      model: apiModel,
+      prompt,
+    });
 
     return NextResponse.json({
-      imageUrl: imageDataUrl,
+      imageUrl: asset.url,
+      asset,
       size: result.size || apiSize,
       usage: result.usage || null,
     });

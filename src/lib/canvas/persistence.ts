@@ -1,17 +1,51 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import path from 'node:path';
+import { getDatabase } from '@/lib/local-data/database';
 import type { CanvasData, CanvasListItem } from './types';
 
-interface CanvasStoreFile {
-  canvases: CanvasData[];
+interface CanvasRow {
+  id: string;
+  name: string;
+  nodes_json: string;
+  edges_json: string;
+  viewport_json: string | null;
+  created_at: number;
+  updated_at: number;
 }
-
-const DATA_DIR = path.join(process.cwd(), '.canvas-data');
-const DATA_FILE = path.join(DATA_DIR, 'canvases.json');
 
 function now() {
   return Date.now();
+}
+
+function parseJson<T>(value: string | null, fallback: T): T {
+  if (!value) return fallback;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function rowToCanvas(row: CanvasRow): CanvasData {
+  return {
+    id: row.id,
+    name: row.name,
+    nodes: parseJson<CanvasData['nodes']>(row.nodes_json, []),
+    edges: parseJson<CanvasData['edges']>(row.edges_json, []),
+    viewport: parseJson<CanvasData['viewport']>(row.viewport_json, { x: 0, y: 0, zoom: 1 }),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function toListItemFromRow(row: Pick<CanvasRow, 'id' | 'name' | 'nodes_json' | 'created_at' | 'updated_at'>): CanvasListItem {
+  const nodes = parseJson<CanvasData['nodes']>(row.nodes_json, []);
+  return {
+    id: row.id,
+    name: row.name,
+    nodeCount: nodes.length,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
 }
 
 function toListItem(canvas: CanvasData): CanvasListItem {
@@ -24,28 +58,12 @@ function toListItem(canvas: CanvasData): CanvasListItem {
   };
 }
 
-async function readStore(): Promise<CanvasStoreFile> {
-  try {
-    const raw = await readFile(DATA_FILE, 'utf8');
-    const parsed = JSON.parse(raw) as Partial<CanvasStoreFile>;
-    return { canvases: Array.isArray(parsed.canvases) ? parsed.canvases : [] };
-  } catch (error: unknown) {
-    const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : '';
-    if (code === 'ENOENT') {
-      return { canvases: [] };
-    }
-    throw error;
-  }
-}
-
-async function writeStore(store: CanvasStoreFile) {
-  await mkdir(DATA_DIR, { recursive: true });
-  await writeFile(DATA_FILE, `${JSON.stringify(store, null, 2)}\n`, 'utf8');
-}
-
 export async function listCanvases() {
-  const store = await readStore();
-  return store.canvases.map(toListItem).sort((a, b) => b.updatedAt - a.updatedAt);
+  const rows = getDatabase()
+    .prepare('select id, name, nodes_json, created_at, updated_at from canvases order by updated_at desc')
+    .all() as Array<Pick<CanvasRow, 'id' | 'name' | 'nodes_json' | 'created_at' | 'updated_at'>>;
+
+  return rows.map(toListItemFromRow);
 }
 
 export async function createCanvas(name = 'Untitled canvas') {
@@ -59,25 +77,35 @@ export async function createCanvas(name = 'Untitled canvas') {
     createdAt: timestamp,
     updatedAt: timestamp,
   };
-  const store = await readStore();
-  store.canvases.unshift(canvas);
-  await writeStore(store);
+
+  getDatabase().prepare(`
+    insert into canvases (id, name, nodes_json, edges_json, viewport_json, created_at, updated_at)
+    values (@id, @name, @nodesJson, @edgesJson, @viewportJson, @createdAt, @updatedAt)
+  `).run({
+    id: canvas.id,
+    name: canvas.name,
+    nodesJson: JSON.stringify(canvas.nodes),
+    edgesJson: JSON.stringify(canvas.edges),
+    viewportJson: JSON.stringify(canvas.viewport),
+    createdAt: canvas.createdAt,
+    updatedAt: canvas.updatedAt,
+  });
+
   return canvas;
 }
 
 export async function getCanvas(id: string) {
-  const store = await readStore();
-  return store.canvases.find((canvas) => canvas.id === id) || null;
+  const row = getDatabase()
+    .prepare('select * from canvases where id = ?')
+    .get(id) as CanvasRow | undefined;
+
+  return row ? rowToCanvas(row) : null;
 }
 
 export async function saveCanvas(id: string, data: Partial<CanvasData>) {
-  const store = await readStore();
-  const index = store.canvases.findIndex((canvas) => canvas.id === id);
-  if (index < 0) {
-    return null;
-  }
+  const existing = await getCanvas(id);
+  if (!existing) return null;
 
-  const existing = store.canvases[index];
   const updated: CanvasData = {
     ...existing,
     name: typeof data.name === 'string' && data.name.trim() ? data.name.trim() : existing.name,
@@ -87,8 +115,23 @@ export async function saveCanvas(id: string, data: Partial<CanvasData>) {
     updatedAt: now(),
   };
 
-  store.canvases[index] = updated;
-  await writeStore(store);
+  getDatabase().prepare(`
+    update canvases
+    set name = @name,
+        nodes_json = @nodesJson,
+        edges_json = @edgesJson,
+        viewport_json = @viewportJson,
+        updated_at = @updatedAt
+    where id = @id
+  `).run({
+    id,
+    name: updated.name,
+    nodesJson: JSON.stringify(updated.nodes),
+    edgesJson: JSON.stringify(updated.edges),
+    viewportJson: JSON.stringify(updated.viewport),
+    updatedAt: updated.updatedAt,
+  });
+
   return updated;
 }
 
@@ -97,13 +140,9 @@ export async function renameCanvas(id: string, name: string) {
 }
 
 export async function deleteCanvas(id: string) {
-  const store = await readStore();
-  const nextCanvases = store.canvases.filter((canvas) => canvas.id !== id);
-  if (nextCanvases.length === store.canvases.length) {
-    return false;
-  }
-  await writeStore({ canvases: nextCanvases });
-  return true;
+  const result = getDatabase().prepare('delete from canvases where id = ?').run(id);
+  return result.changes > 0;
 }
 
 export { toListItem };
+

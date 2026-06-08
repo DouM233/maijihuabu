@@ -4,6 +4,7 @@ import { memo, useCallback } from 'react';
 import { Handle, Position, type NodeProps, useReactFlow } from '@xyflow/react';
 import { Upload, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { uploadAssetFile } from '@/lib/client/uploadAsset';
 import type { UploadNodeData } from '@/lib/canvas/types';
 
 function UploadNode({ id, data, selected }: NodeProps) {
@@ -53,12 +54,11 @@ function UploadNode({ id, data, selected }: NodeProps) {
               const input = document.createElement('input');
               input.type = 'file';
               input.accept = 'image/*';
-              input.onchange = (e) => {
+              input.onchange = async (e) => {
                 const file = (e.target as HTMLInputElement).files?.[0];
                 if (!file) return;
-                const reader = new FileReader();
-                reader.onload = () => update({ imageUrl: reader.result as string, uploadType: 'image' });
-                reader.readAsDataURL(file);
+                const asset = await uploadAssetFile(file);
+                update({ imageUrl: asset.url, label: asset.originalName, uploadType: 'image' });
               };
               input.click();
             }}
